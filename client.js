@@ -35,6 +35,8 @@ window.__ModuleLoader__.load({
     var drafts = new Map();
     /** Client root context, kept for the session-scoped chip event. */
     var rootContext = null;
+    /** 应用提供的服务，用来在文件管理器里定位路径。 */
+    var appRemote = null;
     /** Session whose composer rendered most recently. */
     var activeSession = null;
 
@@ -547,9 +549,26 @@ window.__ModuleLoader__.load({
       }, 1400);
     }
 
-    /** Ask the 服务端 to select the file in the OS file manager. */
+    /** 在系统文件管理器里选中路径，接口不可用时走本地通道。 */
     function reveal(path) {
-      fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).catch(function () {
+      var remote = appRemote === null ? null : appRemote.session;
+      if (remote !== null && remote !== undefined && typeof remote.openWorkspacePath === "function") {
+        remote.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
+          if (result !== null && result !== undefined && result.ok) return;
+          revealViaRoute(path);
+        }, function () {
+          revealViaRoute(path);
+        });
+        return;
+      }
+      revealViaRoute(path);
+    }
+
+    /** 本地通道：请应用在系统文件管理器里选中路径。 */
+    function revealViaRoute(path) {
+      fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
+        if (!response.ok) toast("无法打开文件管理器");
+      }, function () {
         toast("无法打开文件管理器");
       });
     }
@@ -568,10 +587,11 @@ window.__ModuleLoader__.load({
 
     /* ── plugin entry ───────────────────────────────────────────────────── */
 
-    var inject = ["slots", "sessions"];
+    var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
       rootContext = ctx;
+      appRemote = ctx.remote === undefined ? null : ctx.remote;
       ctx.effect(function () {
         document.addEventListener("contextmenu", onContextMenu, true);
         return function () {

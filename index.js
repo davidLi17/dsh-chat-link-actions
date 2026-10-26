@@ -48,11 +48,33 @@ function reply(res, status, body) {
 export function apply(ctx) {
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
 
+  /** Start the file manager and report whether the launcher accepted the command. */
+  const launch = async (path) => {
+    const { command, args } = revealCommand(path)
+    return new Promise((resolve) => {
+      let settled = false
+      const done = (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(value)
+      }
+      const timer = setTimeout(() => done('launched'), 1500)
+      const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+      child.once('spawn', () => done('launched'))
+      child.once('error', (error) => done(error))
+      child.unref()
+    })
+  }
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: '/chat-link-actions',
     handler: async (req, res) => {
-      if (!fence(req)) return reply(res, 403, { ok: false, error: 'forbidden' })
+      if (!fence(req)) {
+        ctx.logger?.warn?.('chat-link-actions: reveal request rejected by the connection fence')
+        return reply(res, 403, { ok: false, error: 'forbidden' })
+      }
       if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'method' })
       try {
         const url = new URL(req.url ?? '/', 'http://dsh.internal')
@@ -62,10 +84,11 @@ export function apply(ctx) {
         const path = requireAbsolute(url.searchParams.get('path'))
         const info = await stat(path).catch(() => null)
         if (info === null) return reply(res, 404, { ok: false, error: 'not-found' })
-        const { command, args } = revealCommand(path)
-        const child = spawn(command, args, { detached: true, stdio: 'ignore' })
-        child.on('error', () => {})
-        child.unref()
+        const outcome = await launch(path)
+        if (outcome !== 'launched') {
+          ctx.logger?.warn?.(`chat-link-actions: file manager launch failed: ${String(outcome?.message ?? outcome)}`)
+          return reply(res, 500, { ok: false, error: 'launch-failed' })
+        }
         return reply(res, 200, { ok: true })
       } catch (error) {
         return reply(res, 400, { ok: false, error: String(error?.message ?? error) })
