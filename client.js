@@ -477,6 +477,37 @@ window.__ModuleLoader__.load({
       "@keyframes dcla-in{from{opacity:0;transform:translateY(-2px);}to{opacity:1;transform:none;}}"
     ].join("");
 
+    /** 界面语言跟着宿主走：宿主把当前语言写在 <html lang> 上。 */  // ui-copy-ignore
+    var TEXT = {
+      zh: {  // ui-copy-ignore
+        menu: "文件操作",  // ui-copy-ignore
+        quote: "引用到对话",  // ui-copy-ignore
+        reveal: "在文件管理器中查看",  // ui-copy-ignore
+        copy: "复制路径",  // ui-copy-ignore
+        copiedPath: "已复制路径",  // ui-copy-ignore
+        copiedQuote: "已复制引用",  // ui-copy-ignore
+        missing: "目标文件不存在",  // ui-copy-ignore
+        managerFailed: "无法打开文件管理器"  // ui-copy-ignore
+      },
+      en: {  // ui-copy-ignore
+        menu: "File actions",  // ui-copy-ignore
+        quote: "Quote in chat",  // ui-copy-ignore
+        reveal: "Show in file manager",  // ui-copy-ignore
+        copy: "Copy path",  // ui-copy-ignore
+        copiedPath: "Path copied",  // ui-copy-ignore
+        copiedQuote: "Reference copied",  // ui-copy-ignore
+        missing: "File not found",  // ui-copy-ignore
+        managerFailed: "Could not open the file manager"  // ui-copy-ignore
+      }
+    };
+
+    function strings() {
+      var element = document.documentElement;
+      var lang = element === null ? "" : element.getAttribute("lang");
+      var tag = typeof lang === "string" && lang !== "" ? lang : (typeof navigator === "undefined" ? "" : navigator.language);
+      return /^zh/i.test(String(tag === null || tag === undefined ? "" : tag)) ? TEXT.zh : TEXT.en;
+    }
+
     function ensureStyle() {
       if (document.getElementById(STYLE_ID) !== null) return;
       var style = document.createElement("style");
@@ -599,7 +630,7 @@ window.__ModuleLoader__.load({
       var panel = document.createElement("div");
       panel.className = "dcla-menu";
       panel.setAttribute("role", "menu");
-      panel.setAttribute("aria-label", "文件操作");
+      panel.setAttribute("aria-label", strings().menu);
 
       var caption = document.createElement("div");
       caption.className = "dcla-path";
@@ -651,23 +682,23 @@ window.__ModuleLoader__.load({
       var settings = options === null || options === undefined ? {} : options;
 
       var items = [
-        { id: "quote", label: "引用到对话", icon: "quote", run: function () {
+        { id: "quote", label: strings().quote, icon: "quote", run: function () {
           probePath(path, function (kind) {
             var directory = kind === "directory" ? true : kind === "file" ? false : settings.directory;
             if (directory === undefined && kind !== "file" && kind !== "directory") directory = guessDirectory(path);
             var inserted = quoteIntoComposer(path, directory);
             if (inserted) return;
             navigator.clipboard.writeText(referenceText(path)).then(function () {
-              toast("已复制引用");
+              toast(strings().copiedQuote);
             }, function () {});
           });
         } },
-        { id: "reveal", label: "在文件管理器中查看", icon: "reveal", run: function () {
+        { id: "reveal", label: strings().reveal, icon: "reveal", run: function () {
           reveal(path);
         } },
-        { id: "copy", label: "复制路径", icon: "copy", run: function () {
+        { id: "copy", label: strings().copy, icon: "copy", run: function () {
           navigator.clipboard.writeText(path).then(function () {
-            toast("已复制路径");
+            toast(strings().copiedPath);
           }, function () {});
         } }
       ];
@@ -837,7 +868,7 @@ window.__ModuleLoader__.load({
     function reveal(path) {
       probePath(path, function (kind) {
         if (kind === "missing") {
-          toast("目标文件不存在");
+          toast(strings().missing);
           return;
         }
         revealViaRoute(path);
@@ -849,7 +880,7 @@ window.__ModuleLoader__.load({
       fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
         if (response.ok) return;
         if (response.status === 404) {
-          toast("目标文件不存在");
+          toast(strings().missing);
           return;
         }
         revealRemote(path);
@@ -863,18 +894,18 @@ window.__ModuleLoader__.load({
       var remote = sessionRemote();
       var session = remote === null ? null : remote.session;
       if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
-        toast("无法打开文件管理器");
+        toast(strings().managerFailed);
         return;
       }
       try {
         session.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
           if (result !== null && result !== undefined && result.ok === true) return;
-          toast(isUnreachablePath(result === null || result === undefined ? null : result.error) ? "目标文件不存在" : "无法打开文件管理器");
+          toast(isUnreachablePath(result === null || result === undefined ? null : result.error) ? strings().missing : strings().managerFailed);
         }, function (error) {
-          toast(isUnreachablePath(error) ? "目标文件不存在" : "无法打开文件管理器");
+          toast(isUnreachablePath(error) ? strings().missing : strings().managerFailed);
         });
       } catch (error) {
-        toast("无法打开文件管理器");
+        toast(strings().managerFailed);
       }
     }
 
