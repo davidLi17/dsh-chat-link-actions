@@ -88,6 +88,16 @@ window.__ModuleLoader__.load({
       return path.charAt(path.length - 1) === "/" || path.charAt(path.length - 1) === "\\";
     }
 
+    /** 问不到会话时只好按形状猜：末尾没有扩展名，多半是目录。 */
+    function guessDirectory(path) {
+      if (looksLikeDirectory(path)) return true;
+      var trimmed = path.replace(/[\\/]+$/, "");
+      var cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+      var name = cut === -1 ? trimmed : trimmed.slice(cut + 1);
+      if (name.charAt(0) === ".") return true;
+      return !/\.[A-Za-z0-9]{1,8}$/.test(name);
+    }
+
     /** Last path segment, the same label the composer's own reference chips show. */
     function displayLabel(path, directory) {
       var trimmed = path.replace(/[\\/]+$/, "");
@@ -103,7 +113,7 @@ window.__ModuleLoader__.load({
      * The shell owns that insertion behind a session-scoped event; when the event
      * is not reachable the caller falls back to plain `insertText`.
      */
-    function insertChip(sessionId, actions, path) {
+    function insertChip(sessionId, actions, path, knownDirectory) {
       if (rootContext === null || typeof rootContext.sessions !== "object" || rootContext.sessions === null) return false;
       var binding = null;
       try {
@@ -115,7 +125,7 @@ window.__ModuleLoader__.load({
       if (sessionContext === null || sessionContext === undefined || typeof sessionContext.emit !== "function") return false;
       var before = actions.captureInsertion();
       if (before === null || before === undefined) return false;
-      var directory = looksLikeDirectory(path);
+      var directory = typeof knownDirectory === "boolean" ? knownDirectory : looksLikeDirectory(path);
       var mention = referenceText(path);
       var reference = {};
       reference.source = "reference";
@@ -139,14 +149,14 @@ window.__ModuleLoader__.load({
     }
 
     /** Insert the reference into a live composer. Returns true on success. */
-    function quoteIntoComposer(path) {
+    function quoteIntoComposer(path, knownDirectory) {
       var candidates = draftCandidates();
       for (var i = 0; i < candidates.length; i += 1) {
         var sessionId = candidates[i].sessionId;
         var actions = candidates[i].actions;
         try {
           if (typeof actions.captureInsertion !== "function") continue;
-          if (insertChip(sessionId, actions, path)) return true;
+          if (insertChip(sessionId, actions, path, knownDirectory)) return true;
           var span = actions.captureInsertion();
           if (span === null || span === undefined) continue;
           if (actions.insertText(referenceText(path) + " ", span) === true) return true;
@@ -169,14 +179,29 @@ window.__ModuleLoader__.load({
         candidate = candidate.slice(1, -1);
       }
       candidate = candidate.replace(/[.,;:!?，。；：！？]+$/u, "");
-      candidate = candidate.replace(/^file:\/\//, "/");
+      if (/^file:\/\//i.test(candidate)) {
+        candidate = candidate.replace(/^file:\/\/(?:localhost)?/i, "");
+        candidate = decodePercent(candidate);
+        if (/^\/[A-Za-z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
+      }
       if (/^[A-Za-z]:(?!\/)/.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
-      candidate = candidate.replace(/^([A-Za-z]):\//, "$1:/");
       return looksAbsolute(candidate) ? candidate : null;
     }
 
     function looksAbsolute(value) {
-      return typeof value === "string" && (value.charAt(0) === "/" || /^[A-Za-z]:[\\/]/.test(value));
+      if (typeof value !== "string" || value === "") return false;
+      if (value.charAt(0) === "/") return true;
+      if (/^[A-Za-z]:[\\/]/.test(value)) return true;
+      return /^\\\\[^\\]+\\[^\\]+/.test(value);
+    }
+
+    /** 只在能安全解码时解开百分号转义。 */
+    function decodePercent(value) {
+      try {
+        return decodeURIComponent(value);
+      } catch (error) {
+        return value;
+      }
     }
 
     /** Highest-confidence marker: the file route an inline link or image points at. */
@@ -219,7 +244,41 @@ window.__ModuleLoader__.load({
     }
 
     /** An absolute path written as plain text inside the clicked element. */
-    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]])(@?"?(?:\/|[A-Za-z]:[\\/])[^\s"'“”「」<>，。；：！？]*)/u;
+    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？]*)/u;
+
+    /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
+    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}|[\\/])$/u;
+
+    /** 一段词像不像同一路径的下一段：不以分隔符或盘符开头，也不带句子标点。 */
+    function continuesPath(word) {
+      if (word === "" || /^[\/"'\u201c\u201d\u300c\u300d<>]/u.test(word)) return false;
+      if (/^[A-Za-z]:/u.test(word)) return false;
+      return true;
+    }
+
+    /**
+     * `C:\Users\apple\Desktop\a b.md` 这类带空格的路径，正则只吃到第一个空格。
+     * 往后最多接三段，取「结尾仍然像一个路径」的最长一段。
+     */
+    function joinPathWords(text, rest) {
+      var best = text;
+      var remaining = rest;
+      for (var round = 0; round < 3; round += 1) {
+        var space = /^[ \t]+/u.exec(remaining);
+        if (space === null) break;
+        var word = /^[^ \t"'\u201c\u201d\u300c\u300d<>\u3001\uff0c\u3002\uff1b\uff1a\uff01\uff1f]+/u.exec(remaining.slice(space[0].length));
+        if (word === null) break;
+        remaining = remaining.slice(space[0].length + word[0].length);
+        if (!continuesPath(word[0])) break;
+        var joined = best + " " + word[0];
+        if (PATH_TAIL.test(joined)) best = joined;
+        else if (!PATH_TAIL.test(best)) {
+          /* 还没成句：继续接，等扩展名出现 */
+          best = joined;
+        }
+      }
+      return best;
+    }
 
     /** 正文纯文本里，取光标落点所在的那段路径。 */
     function pathFromCaret(x, y) {
@@ -231,8 +290,25 @@ window.__ModuleLoader__.load({
         return null;
       }
       if (range === null || range.startContainer === null || range.startContainer.nodeType !== 3) return null;
-      var data = range.startContainer.data;
+      var node = range.startContainer;
+      var data = node.data;
       var offset = Math.min(range.startOffset, data.length);
+      var lead = 0;
+      for (var back = 0, walker = node; back < 2; back += 1) {
+        walker = walker.previousSibling;
+        if (walker === null || walker.nodeType !== 3) break;
+        lead += walker.data.length;
+      }
+      if (lead > 0) {
+        var merged = "";
+        for (var step = 0, cursor = node; step < 2; step += 1) {
+          cursor = cursor.previousSibling;
+          if (cursor === null || cursor.nodeType !== 3) break;
+          merged = cursor.data + merged;
+        }
+        data = merged + data;
+        offset += lead;
+      }
       var bounds = [];
       var matcher = new RegExp(PATH_IN_TEXT.source, "gu");
       var hit = null;
@@ -242,7 +318,8 @@ window.__ModuleLoader__.load({
       }
       for (var i = 0; i < bounds.length; i += 1) {
         if (offset >= bounds[i].start && offset <= bounds[i].end) {
-          return normalizeCandidate(bounds[i].text);
+          var tail = data.slice(bounds[i].end);
+          return normalizeCandidate(joinPathWords(bounds[i].text, tail));
         }
       }
       return null;
@@ -280,23 +357,63 @@ window.__ModuleLoader__.load({
      * the DOM: a Markdown image renders an icon and a file name only. Walk the
      * fiber chain up from the clicked node until a prop names a file.
      */
-    function pathFromFiber(node) {
-      var fiber = null;
-      for (var owner = node; owner !== null && owner !== undefined && owner !== document.body && fiber === null; owner = owner.parentElement) {
+    function fiberOf(node) {
+      for (var owner = node; owner !== null && owner !== undefined && owner !== document.body; owner = owner.parentElement) {
         if (owner.nodeType !== 1) continue;
         var keys = Object.keys(owner);
         for (var i = 0; i < keys.length; i += 1) {
-          if (!FIBER_KEY.test(keys[i])) continue;
-          fiber = owner[keys[i]];
-          break;
+          if (FIBER_KEY.test(keys[i])) return owner[keys[i]];
         }
       }
+      return null;
+    }
+
+    function pathFromFiber(node) {
+      var fiber = fiberOf(node);
       for (var depth = 0; fiber !== null && fiber !== undefined && depth < 24; depth += 1) {
         var found = pathFromProps(fiber.memoizedProps);
         if (found !== null) return found;
         fiber = fiber.return;
       }
       return null;
+    }
+
+    /** 组件自己知道这是个文件夹：appearance / isDirectory 之类的提示。 */
+    function directoryHintFromProps(props) {
+      if (props === null || typeof props !== "object") return undefined;
+      var round = [props];
+      var file = props.file;
+      if (file !== null && typeof file === "object") round.push(file);
+      var inner = props.reference;
+      if (inner !== null && typeof inner === "object") round.push(inner);
+      for (var i = 0; i < round.length; i += 1) {
+        var item = round[i];
+        if (item === null || typeof item !== "object") continue;
+        if (item.appearance === "folder" || item.appearance === "directory") return true;
+        if (item.appearance === "file") return false;
+        if (item.isDirectory === true || item.directory === true) return true;
+        if (item.isDirectory === false) return false;
+      }
+      return undefined;
+    }
+
+    function directoryHint(node) {
+      for (var owner = node; owner !== null && owner !== undefined && owner !== document.body; owner = owner.parentElement) {
+        if (owner.nodeType !== 1) continue;
+        var attr = owner.getAttribute("data-appearance") || owner.getAttribute("data-type") || owner.getAttribute("data-kind");
+        if (attr !== null) {
+          var value = attr.toLowerCase();
+          if (value === "folder" || value === "directory") return true;
+          if (value === "file") return false;
+        }
+      }
+      var fiber = fiberOf(node);
+      for (var depth = 0; fiber !== null && fiber !== undefined && depth < 24; depth += 1) {
+        var hint = directoryHintFromProps(fiber.memoizedProps);
+        if (hint !== undefined) return hint;
+        fiber = fiber.return;
+      }
+      return undefined;
     }
 
     /**
@@ -318,7 +435,7 @@ window.__ModuleLoader__.load({
       }
       var fromFiber = pathFromFiber(start);
       if (fromFiber !== null) return fromFiber;
-      if (point !== null && point !== undefined) {
+      if (point !== null && point !== undefined && point.allowProse !== false) {
         var fromCaret = pathFromCaret(point.x, point.y);
         if (fromCaret !== null) return fromCaret;
       }
@@ -528,22 +645,21 @@ window.__ModuleLoader__.load({
       return { panel: panel, buttons: buttons };
     }
 
-    function openMenu(path, x, y) {
+    function openMenu(path, x, y, options) {
       closeMenu(false);
       ensureStyle();
+      var settings = options === null || options === undefined ? {} : options;
 
       var items = [
         { id: "quote", label: "引用到对话", icon: "quote", run: function () {
-          var inserted = quoteIntoComposer(path);
-          if (!inserted) {
-            navigator.clipboard.writeText(referenceText(path)).then(function () {}, function () {});
-          }
           probePath(path, function (kind) {
-            if (kind === "missing") {
-              toast("引用文件不存在");
-              return;
-            }
-            if (!inserted) toast("已复制引用");
+            var directory = kind === "directory" ? true : kind === "file" ? false : settings.directory;
+            if (directory === undefined && kind !== "file" && kind !== "directory") directory = guessDirectory(path);
+            var inserted = quoteIntoComposer(path, directory);
+            if (inserted) return;
+            navigator.clipboard.writeText(referenceText(path)).then(function () {
+              toast("已复制引用");
+            }, function () {});
           });
         } },
         { id: "reveal", label: "在文件管理器中查看", icon: "reveal", run: function () {
@@ -555,6 +671,12 @@ window.__ModuleLoader__.load({
           }, function () {});
         } }
       ];
+
+      if (settings.inField === true) {
+        items = items.filter(function (item) {
+          return item.id !== "quote";
+        });
+      }
 
       var layer = document.createElement("div");
       layer.className = "dcla-layer";
@@ -627,44 +749,88 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    /** 路径是否存在：先当文件问，再当目录问。 */
+    /** 路径是否存在：先当文件问，再当目录问；多个会话依次问，问到一个就够。 */
+    /** 某个会话自己的 workspaceFiles；拿不到时退回当前会话的那一份。 */
+    function filesFor(sessionId, fallback) {
+      try {
+        var context = rootContext === null || typeof rootContext.sessions !== "object" || rootContext.sessions === null
+          ? null
+          : rootContext.sessions.binding(sessionId);
+        var sessionContext = context === null || context === undefined ? null : context.ctx;
+        var remote = sessionContext === null || sessionContext === undefined ? null : sessionContext.remote;
+        var files = remote === null || remote === undefined ? null : remote.workspaceFiles;
+        if (files !== null && files !== undefined && typeof files.stat === "function") return files;
+      } catch (error) {
+        /* fall through to the shared remote */
+      }
+      return fallback;
+    }
+
     function probePath(path, done) {
       var remote = sessionRemote();
-      var files = remote === null ? null : remote.workspaceFiles;
+      var shared = remote === null ? null : remote.workspaceFiles;
       var candidates = draftCandidates();
-      var sessionId = candidates.length === 0 ? undefined : candidates[0].sessionId;
-      if (files === null || files === undefined || typeof files.stat !== "function" || sessionId === undefined) {
+      if (candidates.length === 0) {
         done("unknown");
         return;
       }
       var settled = false;
+      var position = 0;
       var probeTimer = setTimeout(function () {
         finish("unknown");
-      }, 900);
+      }, 700);
       function finish(kind) {
         if (settled) return;
         settled = true;
         clearTimeout(probeTimer);
         done(kind);
       }
-      function askDirectory() {
+      function next() {
+        if (settled) return;
+        if (position >= candidates.length) {
+          finish("missing");
+          return;
+        }
+        var sessionId = candidates[position].sessionId;
+        position += 1;
+        var files = filesFor(sessionId, shared);
+        if (files === null || files === undefined || typeof files.stat !== "function") {
+          next();
+          return;
+        }
+        var moved = false;
+        function move() {
+          if (settled || moved) return;
+          moved = true;
+          next();
+        }
+        function askDirectory() {
+          try {
+            files.list(sessionId, path).then(function () {
+              finish("directory");
+            }, move);
+          } catch (error) {
+            move();
+          }
+        }
         try {
-          files.list(sessionId, path).then(function () {
-            finish("present");
-          }, function () {
-            finish("missing");
-          });
+          files.stat(sessionId, path).then(function () {
+            /* stat 不区分文件与目录：用列举确认，列得出来就是目录。 */
+            files.list(sessionId, path).then(function () {
+              finish("directory");
+            }, function (error) {
+              /* 只有后端明确说「不是目录」才算文件；别的失败当作问不到。 */
+              var code = error === null || error === undefined ? "" : String(error.code === undefined ? "" : error.code);
+              var message = error === null || error === undefined ? "" : String(error.message === undefined ? "" : error.message);
+              if (/not-directory/i.test(code) || /not-directory|is a file/i.test(message)) finish("file");
+              else finish("unknown");
+            });
+          }, askDirectory);
         } catch (error) {
-          finish("unknown");
+          askDirectory();
         }
       }
-      try {
-        files.stat(sessionId, path).then(function () {
-          finish("present");
-        }, askDirectory);
-      } catch (error) {
-        askDirectory();
-      }
+      next();
     }
 
     /** 在系统文件管理器里选中路径；路径不存在时直接告知。 */
@@ -719,14 +885,40 @@ window.__ModuleLoader__.load({
 
     /* ── interception ───────────────────────────────────────────────────── */
 
+    var EDITABLE_SELECTOR = "textarea,input,[contenteditable=''],[contenteditable=true],[contenteditable=plaintext-only]";
+
+    /** 输入框里右键通常是要粘贴：只有点到引用芯片这类带路径的元素才接管。 */
+    function editableField(node) {
+      if (node instanceof Element && node.closest(EDITABLE_SELECTOR) !== null) return true;
+      return node instanceof Element && node.isContentEditable;
+    }
+
+    /** 插件自己的故障只记一条日志，绝不让页面上的右键整体失效。 */
+    function noteFailure(error) {
+      try {
+        var context = rootContext;
+        if (context !== null && context !== undefined && typeof context.logger?.warn === "function") {
+          context.logger.warn("chat-link-actions: menu failed: " + String(error && error.message ? error.message : error));
+        }
+      } catch (ignored) {
+        /* logging must never throw */
+      }
+    }
+
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
-      var path = pathFromNode(target, { x: event.clientX, y: event.clientY });
-      if (path === null) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openMenu(path, event.clientX, event.clientY);
+      try {
+        var inField = editableField(target);
+        var path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
+        if (path === null) return;
+        openMenu(path, event.clientX, event.clientY, { inField: inField, directory: directoryHint(target) });
+        event.preventDefault();
+        event.stopPropagation();
+      } catch (error) {
+        closeMenu(false);
+        noteFailure(error);
+      }
     }
 
     /* ── plugin entry ───────────────────────────────────────────────────── */
