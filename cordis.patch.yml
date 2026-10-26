@@ -1,0 +1,7 @@
+# dsh-chat-link-actions bundle patch
+#
+# One insert row; the entry `name` must equal the package name so the client
+# modules scan resolves ./client and serves it as the plugin's browser bundle.
+- insert:
+    - id: chat-link-actions
+      name: 'dsh-chat-link-actions'

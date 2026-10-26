@@ -1,0 +1,52 @@
+{
+  "name": "dsh-chat-link-actions",
+  "version": "0.1.0",
+  "description": "Right-click actions on file links in the DSH transcript: quote the path into the composer, or reveal the file in the OS file manager. Menus are drawn in the app's own style, never the system one.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": {
+      "default": "./client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "icon.png"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "link-actions",
+    "file-link",
+    "quote-path",
+    "reveal-in-finder"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "author": "regrevia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/regrevia/dsh-chat-link-actions.git"
+  }
+}
