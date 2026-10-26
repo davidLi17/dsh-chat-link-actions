@@ -35,8 +35,6 @@ window.__ModuleLoader__.load({
     var drafts = new Map();
     /** Client root context, kept for the session-scoped chip event. */
     var rootContext = null;
-    /** 应用提供的服务，用来在文件管理器里定位路径。 */
-    var appRemote = null;
     /** Session whose composer rendered most recently. */
     var activeSession = null;
 
@@ -250,6 +248,57 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** 节点上的内部属性键前缀。 */
+    var FIBER_KEY = /^__(?:reactFiber|reactInternalInstance)\$/;
+
+    /** 可能带文件的属性名。 */
+    var PROP_KEYS = ["destination", "path", "src", "href"];
+
+    /** Strip the line suffix a Markdown file link carries (`path#L12`). */
+    function stripLineSuffix(value) {
+      if (typeof value !== "string") return value;
+      return value.replace(/#L[0-9]+(?:-L[0-9]+)?$/u, "");
+    }
+
+    /** Read the path a component's props carry, if any. */
+    function pathFromProps(props) {
+      if (props === null || typeof props !== "object") return null;
+      var file = props.file;
+      if (file !== null && typeof file === "object") {
+        var fromFile = normalizeCandidate(stripLineSuffix(file.path));
+        if (fromFile !== null) return fromFile;
+      }
+      for (var i = 0; i < PROP_KEYS.length; i += 1) {
+        var fromProp = normalizeCandidate(stripLineSuffix(props[PROP_KEYS[i]]));
+        if (fromProp !== null) return fromProp;
+      }
+      return null;
+    }
+
+    /**
+     * React file cards keep their path in the owning component's props, not in
+     * the DOM: a Markdown image renders an icon and a file name only. Walk the
+     * fiber chain up from the clicked node until a prop names a file.
+     */
+    function pathFromFiber(node) {
+      var fiber = null;
+      for (var owner = node; owner !== null && owner !== undefined && owner !== document.body && fiber === null; owner = owner.parentElement) {
+        if (owner.nodeType !== 1) continue;
+        var keys = Object.keys(owner);
+        for (var i = 0; i < keys.length; i += 1) {
+          if (!FIBER_KEY.test(keys[i])) continue;
+          fiber = owner[keys[i]];
+          break;
+        }
+      }
+      for (var depth = 0; fiber !== null && fiber !== undefined && depth < 24; depth += 1) {
+        var found = pathFromProps(fiber.memoizedProps);
+        if (found !== null) return found;
+        fiber = fiber.return;
+      }
+      return null;
+    }
+
     /**
      * Walk up from the clicked node looking for a file link: href/src first, then
      * an absolute `data-*` value, then a title, then the element's own text. The
@@ -267,6 +316,8 @@ window.__ModuleLoader__.load({
         var fromTitle = normalizeCandidate(node.getAttribute("title"));
         if (fromTitle !== null) return fromTitle;
       }
+      var fromFiber = pathFromFiber(start);
+      if (fromFiber !== null) return fromFiber;
       if (point !== null && point !== undefined) {
         var fromCaret = pathFromCaret(point.x, point.y);
         if (fromCaret !== null) return fromCaret;
@@ -487,11 +538,17 @@ window.__ModuleLoader__.load({
 
       var items = [
         { id: "quote", label: "引用到对话", icon: "quote", run: function () {
-          if (!quoteIntoComposer(path)) {
-            navigator.clipboard.writeText(referenceText(path)).then(function () {
-              toast("已复制引用");
-            }, function () {});
+          var inserted = quoteIntoComposer(path);
+          if (!inserted) {
+            navigator.clipboard.writeText(referenceText(path)).then(function () {}, function () {});
           }
+          probePath(path, function (kind) {
+            if (kind === "missing") {
+              toast("引用文件不存在");
+              return;
+            }
+            if (!inserted) toast("已复制引用");
+          });
         } },
         { id: "reveal", label: isMac() ? "在访达中查看" : "在文件管理器中查看", icon: "reveal", run: function () {
           reveal(path);
@@ -549,19 +606,109 @@ window.__ModuleLoader__.load({
       }, 1400);
     }
 
-    /** 在系统文件管理器里选中路径，接口不可用时走本地通道。 */
-    function reveal(path) {
-      var remote = appRemote === null ? null : appRemote.session;
-      if (remote !== null && remote !== undefined && typeof remote.openWorkspacePath === "function") {
-        remote.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
-          if (result !== null && result !== undefined && result.ok) return;
-          revealViaRoute(path);
-        }, function () {
-          revealViaRoute(path);
-        });
+    /** 当前会话提供的应用服务；没有会话时返回空。 */
+    function sessionRemote() {
+      var context = sessionContext();
+      var remote = context === null ? undefined : context.remote;
+      if (remote !== undefined && remote !== null) return remote;
+      var root = rootContext === null ? undefined : rootContext.remote;
+      return root === undefined || root === null ? null : root;
+    }
+
+    /** 第一条可用会话的上下文，应用的会话服务挂在它上面。 */
+    function sessionContext() {
+      if (rootContext === null || typeof rootContext.sessions !== "object" || rootContext.sessions === null) return null;
+      var candidates = draftCandidates();
+      for (var i = 0; i < candidates.length; i += 1) {
+        try {
+          var binding = rootContext.sessions.binding(candidates[i].sessionId);
+          var context = binding === null || binding === undefined ? null : binding.ctx;
+          if (context !== null && context !== undefined) return context;
+        } catch (error) {
+          /* try the next session */
+        }
+      }
+      return null;
+    }
+
+    /** 路径是否存在：先当文件问，再当目录问。 */
+    function probePath(path, done) {
+      var remote = sessionRemote();
+      var files = remote === null ? null : remote.workspaceFiles;
+      var candidates = draftCandidates();
+      var sessionId = candidates.length === 0 ? undefined : candidates[0].sessionId;
+      if (files === null || files === undefined || typeof files.stat !== "function" || sessionId === undefined) {
+        done("unknown");
         return;
       }
-      revealViaRoute(path);
+      var settled = false;
+      function finish(kind) {
+        if (settled) return;
+        settled = true;
+        done(kind);
+      }
+      function askDirectory() {
+        try {
+          files.list(sessionId, path).then(function () {
+            finish("present");
+          }, function () {
+            finish("missing");
+          });
+        } catch (error) {
+          finish("unknown");
+        }
+      }
+      try {
+        files.stat(sessionId, path).then(function () {
+          finish("present");
+        }, askDirectory);
+      } catch (error) {
+        askDirectory();
+      }
+    }
+
+    /** 在系统文件管理器里选中路径；路径不存在时直接告知。 */
+    function reveal(path) {
+      probePath(path, function (kind) {
+        if (kind === "missing") {
+          toast("目标文件不存在");
+          return;
+        }
+        revealRemote(path);
+      });
+    }
+
+    /** 交给应用去打开；路径定位不到时同样按不存在处理。 */
+    function revealRemote(path) {
+      var remote = sessionRemote();
+      var session = remote === null ? null : remote.session;
+      if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
+        revealViaRoute(path);
+        return;
+      }
+      try {
+        session.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
+          if (result !== null && result !== undefined && result.ok === true) return;
+          if (isUnreachablePath(result === null || result === undefined ? null : result.error)) {
+            toast("目标文件不存在");
+            return;
+          }
+          revealViaRoute(path);
+        }, function (error) {
+          if (isUnreachablePath(error)) {
+            toast("目标文件不存在");
+            return;
+          }
+          revealViaRoute(path);
+        });
+      } catch (error) {
+        revealViaRoute(path);
+      }
+    }
+
+    /** 应用对定位不到的路径返回这个结果。 */
+    function isUnreachablePath(error) {
+      return error !== null && error !== undefined && error.code === "gateway/bad-request";
     }
 
     /** 本地通道：请应用在系统文件管理器里选中路径。 */
@@ -591,7 +738,6 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       rootContext = ctx;
-      appRemote = ctx.remote === undefined ? null : ctx.remote;
       ctx.effect(function () {
         document.addEventListener("contextmenu", onContextMenu, true);
         return function () {
