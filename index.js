@@ -1,9 +1,7 @@
 /**
- * dsh-chat-link-actions — layer half.
+ * dsh-chat-link-actions — 服务端半：按请求在系统文件管理器里定位文件。
  *
- * One job: reveal a transcript file path in the OS file manager (select the
- * item, not just its folder). Everything the user sees is drawn by the client
- * half; this route is the only part that needs process/argv access.
+ * 只做一件事：在文件管理器里选中文件本身。界面由 client.js 绘制。
  *
  * Security posture mirrors the other installed bundles: the connection's own
  * request fence rejects cross-origin callers, the path must be absolute, and

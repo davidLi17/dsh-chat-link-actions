@@ -33,6 +33,8 @@ window.__ModuleLoader__.load({
 
     /** SessionId -> inputActions for that session's composer. */
     var drafts = new Map();
+    /** Client root context, kept for the session-scoped chip event. */
+    var rootContext = null;
     /** Session whose composer rendered most recently. */
     var activeSession = null;
 
@@ -61,9 +63,17 @@ window.__ModuleLoader__.load({
 
     function draftCandidates() {
       var ordered = [];
-      if (activeSession !== null && drafts.has(activeSession)) ordered.push(drafts.get(activeSession));
-      drafts.forEach(function (actions) {
-        if (ordered.indexOf(actions) === -1) ordered.push(actions);
+      var seen = [];
+      function add(sessionId) {
+        if (sessionId === undefined || sessionId === null) return;
+        var actions = drafts.get(sessionId);
+        if (actions === undefined || seen.indexOf(actions) !== -1) return;
+        seen.push(actions);
+        ordered.push({ sessionId: sessionId, actions: actions });
+      }
+      add(activeSession);
+      drafts.forEach(function (_actions, sessionId) {
+        add(sessionId);
       });
       return ordered;
     }
@@ -73,13 +83,70 @@ window.__ModuleLoader__.load({
       return /[\s"]/.test(path) ? '@"' + path.replace(/"/g, '\\"') + '"' : "@" + path;
     }
 
+    /** Directory links carry a trailing separator; files never do. */
+    function looksLikeDirectory(path) {
+      return path.charAt(path.length - 1) === "/" || path.charAt(path.length - 1) === "\\";
+    }
+
+    /** Last path segment, the same label the composer's own reference chips show. */
+    function displayLabel(path, directory) {
+      var trimmed = path.replace(/[\\/]+$/, "");
+      var cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+      var name = cut === -1 ? trimmed : trimmed.slice(cut + 1);
+      if (name === "") name = trimmed;
+      return directory ? name + "/" : name;
+    }
+
+    /**
+     * Insert the reference as the composer's own reference chip (the `(</> name)`
+     * node), which the shell only builds for its file-drop and `@`-picker paths.
+     * The shell owns that insertion behind a session-scoped event; when the event
+     * is not reachable the caller falls back to plain `insertText`.
+     */
+    function insertChip(sessionId, actions, path) {
+      if (rootContext === null || typeof rootContext.sessions !== "object" || rootContext.sessions === null) return false;
+      var binding = null;
+      try {
+        binding = rootContext.sessions.binding(sessionId);
+      } catch (error) {
+        return false;
+      }
+      var sessionContext = binding === null || binding === undefined ? null : binding.ctx;
+      if (sessionContext === null || sessionContext === undefined || typeof sessionContext.emit !== "function") return false;
+      var before = actions.captureInsertion();
+      if (before === null || before === undefined) return false;
+      var directory = looksLikeDirectory(path);
+      var mention = referenceText(path);
+      var reference = {};
+      reference.source = "reference";
+      reference.ref = mention;
+      reference.label = displayLabel(path, directory);
+      reference.appearance = directory ? "folder" : "file";
+      reference.clipboardText = mention;
+      var request = {};
+      request.reference = reference;
+      request.span = before;
+      var delivered = false;
+      try {
+        delivered = sessionContext.emit("slash/input-insert-reference", request);
+      } catch (error) {
+        return false;
+      }
+      if (delivered === false) return false;
+      var after = actions.captureInsertion();
+      if (after === null || after === undefined) return true;
+      return after.start !== before.start || after.end !== before.end;
+    }
+
     /** Insert the reference into a live composer. Returns true on success. */
     function quoteIntoComposer(path) {
       var candidates = draftCandidates();
       for (var i = 0; i < candidates.length; i += 1) {
-        var actions = candidates[i];
+        var sessionId = candidates[i].sessionId;
+        var actions = candidates[i].actions;
         try {
           if (typeof actions.captureInsertion !== "function") continue;
+          if (insertChip(sessionId, actions, path)) return true;
           var span = actions.captureInsertion();
           if (span === null || span === undefined) continue;
           if (actions.insertText(referenceText(path) + " ", span) === true) return true;
@@ -102,6 +169,9 @@ window.__ModuleLoader__.load({
         candidate = candidate.slice(1, -1);
       }
       candidate = candidate.replace(/[.,;:!?，。；：！？]+$/u, "");
+      candidate = candidate.replace(/^file:\/\//, "/");
+      if (/^[A-Za-z]:(?!\/)/.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
+      candidate = candidate.replace(/^([A-Za-z]):\//, "$1:/");
       return looksAbsolute(candidate) ? candidate : null;
     }
 
@@ -116,6 +186,10 @@ window.__ModuleLoader__.load({
         var url = new URL(href, document.baseURI);
         var fromQuery = normalizeCandidate(url.searchParams.get("path"));
         if (fromQuery !== null) return fromQuery;
+        for (var i = 0; i < ["file", "filepath", "abs", "target"].length; i += 1) {
+          var fromNamed = normalizeCandidate(url.searchParams.get(["file", "filepath", "abs", "target"][i]));
+          if (fromNamed !== null) return fromNamed;
+        }
         if (url.protocol === "file:") return normalizeCandidate(decodeURIComponent(url.pathname));
         if (url.origin === location.origin && looksAbsolute(url.pathname) && /\.[A-Za-z0-9]{1,6}$/.test(url.pathname)) {
           return normalizeCandidate(decodeURIComponent(url.pathname));
@@ -130,19 +204,70 @@ window.__ModuleLoader__.load({
      * Walk up from the clicked node looking for a link that names a file: href
      * first, then an absolute `data-*` value, then the reference chip title.
      */
-    function pathFromNode(start) {
+    var PATH_ATTRS = ["href", "src"];
+
+    /** `data-*` values that may carry a path, in confidence order. */
+    function datasetPath(node) {
+      var dataset = node.dataset || {};
+      var keys = Object.keys(dataset);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (!/path|file|href|src|dir|folder|abs/i.test(keys[i])) continue;
+        var candidate = normalizeCandidate(dataset[keys[i]]);
+        if (candidate !== null) return candidate;
+      }
+      return null;
+    }
+
+    /** An absolute path written as plain text inside the clicked element. */
+    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]])(@?"?(?:\/|[A-Za-z]:[\\/])[^\s"'“”「」<>，。；：！？]*)/u;
+
+    /** 正文纯文本里，取光标落点所在的那段路径。 */
+    function pathFromCaret(x, y) {
+      if (typeof document.caretRangeFromPoint !== "function") return null;
+      var range = null;
+      try {
+        range = document.caretRangeFromPoint(x, y);
+      } catch (error) {
+        return null;
+      }
+      if (range === null || range.startContainer === null || range.startContainer.nodeType !== 3) return null;
+      var data = range.startContainer.data;
+      var offset = Math.min(range.startOffset, data.length);
+      var bounds = [];
+      var matcher = new RegExp(PATH_IN_TEXT.source, "gu");
+      var hit = null;
+      while ((hit = matcher.exec(data)) !== null) {
+        bounds.push({ text: hit[0], start: hit.index, end: hit.index + hit[0].length });
+        if (hit[0].length === 0) matcher.lastIndex += 1;
+      }
+      for (var i = 0; i < bounds.length; i += 1) {
+        if (offset >= bounds[i].start && offset <= bounds[i].end) {
+          return normalizeCandidate(bounds[i].text);
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Walk up from the clicked node looking for a file link: href/src first, then
+     * an absolute `data-*` value, then a title, then the element's own text. The
+     * text pass covers paths the transcript renders as plain prose.
+     */
+    function pathFromNode(start, point) {
       for (var node = start; node !== null && node !== undefined && node !== document.body; node = node.parentElement) {
         if (node.nodeType !== 1) continue;
-        var fromHref = decodePathFromHref(node.getAttribute("href"));
-        if (fromHref !== null) return fromHref;
-        var dataset = node.dataset || {};
-        var keys = Object.keys(dataset);
-        for (var k = 0; k < keys.length; k += 1) {
-          var fromData = normalizeCandidate(dataset[keys[k]]);
-          if (fromData !== null && /\.[A-Za-z0-9]{1,6}$/.test(fromData)) return fromData;
+        for (var a = 0; a < PATH_ATTRS.length; a += 1) {
+          var fromHref = decodePathFromHref(node.getAttribute(PATH_ATTRS[a]));
+          if (fromHref !== null) return fromHref;
         }
+        var fromData = datasetPath(node);
+        if (fromData !== null) return fromData;
         var fromTitle = normalizeCandidate(node.getAttribute("title"));
         if (fromTitle !== null) return fromTitle;
+      }
+      if (point !== null && point !== undefined) {
+        var fromCaret = pathFromCaret(point.x, point.y);
+        if (fromCaret !== null) return fromCaret;
       }
       return null;
     }
@@ -157,7 +282,8 @@ window.__ModuleLoader__.load({
 
     var STYLE_ID = "dsh-chat-link-actions-style";
     var CSS = [
-      ".dcla-menu{position:fixed;z-index:1100;box-sizing:border-box;padding:6px;min-width:200px;",
+      ".dcla-layer{position:fixed;inset:0;z-index:1100;pointer-events:none;}",
+      ".dcla-menu{position:fixed;z-index:1100;pointer-events:auto;box-sizing:border-box;padding:6px;min-width:200px;",
       "max-width:min(320px,calc(100vw - 24px));background:var(--dsw-specific-menu,rgba(30,32,38,.96));",
       "backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
       "-webkit-backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
@@ -281,19 +407,19 @@ window.__ModuleLoader__.load({
 
     function onViewportChange() {
       if (open === null) return;
-      placeMenu(open.layer, open.x, open.y);
+      placeMenu(open.panel, open.x, open.y);
     }
 
     /** Place the panel at the pointer, flipped inward at the viewport edges. */
-    function placeMenu(layer, x, y) {
+    function placeMenu(panel, x, y) {
       var margin = 8;
-      var rect = layer.getBoundingClientRect();
+      var rect = panel.getBoundingClientRect();
       var left = x;
       var top = y;
       if (left + rect.width > window.innerWidth - margin) left = Math.max(margin, x - rect.width);
       if (top + rect.height > window.innerHeight - margin) top = Math.max(margin, y - rect.height);
-      layer.style.left = Math.round(left) + "px";
-      layer.style.top = Math.round(top) + "px";
+      panel.style.left = Math.round(left) + "px";
+      panel.style.top = Math.round(top) + "px";
     }
 
     function paintActive() {
@@ -381,17 +507,18 @@ window.__ModuleLoader__.load({
       layer.appendChild(built.panel);
       document.body.appendChild(layer);
 
-      open = {
-        layer: layer,
-        buttons: built.buttons,
-        items: items,
-        index: 0,
-        path: path,
-        x: x,
-        y: y,
-        restoreFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null
-      };
-      placeMenu(layer, x, y);
+      var state = {};
+      state.layer = layer;
+      state.panel = built.panel;
+      state.buttons = built.buttons;
+      state.items = items;
+      state.index = 0;
+      state.path = path;
+      state.x = x;
+      state.y = y;
+      state.restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      open = state;
+      placeMenu(built.panel, x, y);
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown, true);
       document.addEventListener("contextmenu", onContextDuringMenu, true);
@@ -432,7 +559,7 @@ window.__ModuleLoader__.load({
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
-      var path = pathFromNode(target);
+      var path = pathFromNode(target, { x: event.clientX, y: event.clientY });
       if (path === null) return;
       event.preventDefault();
       event.stopPropagation();
@@ -441,9 +568,10 @@ window.__ModuleLoader__.load({
 
     /* ── plugin entry ───────────────────────────────────────────────────── */
 
-    var inject = ["slots"];
+    var inject = ["slots", "sessions"];
 
     function apply(ctx) {
+      rootContext = ctx;
       ctx.effect(function () {
         document.addEventListener("contextmenu", onContextMenu, true);
         return function () {
