@@ -8,7 +8,7 @@
  * the argv is never shell-interpolated.
  */
 
-import { spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { dirname, isAbsolute } from 'node:path'
 
@@ -40,6 +40,33 @@ function revealCommand(path, platform = process.platform) {
   }
 }
 
+/** The argv that only opens the containing directory, used when selection fails. */
+function openDirectoryCommand(path, platform = process.platform) {
+  switch (platform) {
+    case 'darwin':
+      return { command: 'open', args: [dirname(path)] }
+    case 'win32':
+      return { command: 'explorer.exe', args: [dirname(path)] }
+    case 'android':
+      return { command: 'termux-open', args: [dirname(path)] }
+    default:
+      return { command: 'xdg-open', args: [dirname(path)] }
+  }
+}
+
+/** Run one launcher and resolve its outcome instead of throwing. */
+function run(command, args) {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 3000, windowsHide: true }, (error, stdout, stderr) => {
+      if (error === null) {
+        resolve({ ok: true })
+        return
+      }
+      resolve({ ok: false, error, stderr: String(stderr ?? '') })
+    })
+  })
+}
+
 function reply(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(body))
@@ -48,23 +75,17 @@ function reply(res, status, body) {
 export function apply(ctx) {
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
 
-  /** Start the file manager and report whether the launcher accepted the command. */
+  /** Select the file; when selection is refused, at least open its directory. */
   const launch = async (path) => {
-    const { command, args } = revealCommand(path)
-    return new Promise((resolve) => {
-      let settled = false
-      const done = (value) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        resolve(value)
-      }
-      const timer = setTimeout(() => done('launched'), 1500)
-      const child = spawn(command, args, { detached: true, stdio: 'ignore' })
-      child.once('spawn', () => done('launched'))
-      child.once('error', (error) => done(error))
-      child.unref()
-    })
+    const select = revealCommand(path)
+    const selected = await run(select.command, select.args)
+    if (selected.ok) return { ok: true }
+    ctx.logger?.warn?.(`chat-link-actions: select via ${select.command} failed: ${String(selected.stderr || selected.error?.message || selected.error)}`)
+    const open = openDirectoryCommand(path)
+    const opened = await run(open.command, open.args)
+    if (opened.ok) return { ok: true }
+    ctx.logger?.warn?.(`chat-link-actions: open ${dirname(path)} failed: ${String(opened.stderr || opened.error?.message || opened.error)}`)
+    return { ok: false }
   }
 
   ctx.effect(() => ctx.webServer.register({
@@ -85,10 +106,7 @@ export function apply(ctx) {
         const info = await stat(path).catch(() => null)
         if (info === null) return reply(res, 404, { ok: false, error: 'not-found' })
         const outcome = await launch(path)
-        if (outcome !== 'launched') {
-          ctx.logger?.warn?.(`chat-link-actions: file manager launch failed: ${String(outcome?.message ?? outcome)}`)
-          return reply(res, 500, { ok: false, error: 'launch-failed' })
-        }
+        if (!outcome.ok) return reply(res, 500, { ok: false, error: 'launch-failed' })
         return reply(res, 200, { ok: true })
       } catch (error) {
         return reply(res, 400, { ok: false, error: String(error?.message ?? error) })

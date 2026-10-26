@@ -6,7 +6,7 @@
  * menu. Two actions:
  *
  *   引用到对话               insert `@path` into the composer as one undoable edit
- *   在访达/资源管理器中查看    reveal the file in the OS file manager (服务端接口)
+ *   在文件管理器中查看    reveal the file in the OS file manager (服务端接口)
  *
  * Wiring:
  * - `inputActions` is a standard prop of session-scoped slots
@@ -327,10 +327,6 @@ window.__ModuleLoader__.load({
 
     /* ── wording ────────────────────────────────────────────────────────── */
 
-    function isMac() {
-      return /Mac/i.test(navigator.platform || navigator.userAgent || "");
-    }
-
     /* ── menu styling: project tokens only, no new palette ──────────────── */
 
     var STYLE_ID = "dsh-chat-link-actions-style";
@@ -550,7 +546,7 @@ window.__ModuleLoader__.load({
             if (!inserted) toast("已复制引用");
           });
         } },
-        { id: "reveal", label: isMac() ? "在访达中查看" : "在文件管理器中查看", icon: "reveal", run: function () {
+        { id: "reveal", label: "在文件管理器中查看", icon: "reveal", run: function () {
           reveal(path);
         } },
         { id: "copy", label: "复制路径", icon: "copy", run: function () {
@@ -642,9 +638,13 @@ window.__ModuleLoader__.load({
         return;
       }
       var settled = false;
+      var probeTimer = setTimeout(function () {
+        finish("unknown");
+      }, 900);
       function finish(kind) {
         if (settled) return;
         settled = true;
+        clearTimeout(probeTimer);
         done(kind);
       }
       function askDirectory() {
@@ -674,50 +674,47 @@ window.__ModuleLoader__.load({
           toast("目标文件不存在");
           return;
         }
+        revealViaRoute(path);
+      });
+    }
+
+    /** 首选：直接请系统文件管理器选中。 */
+    function revealViaRoute(path) {
+      fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
+        if (response.ok) return;
+        if (response.status === 404) {
+          toast("目标文件不存在");
+          return;
+        }
+        revealRemote(path);
+      }, function () {
         revealRemote(path);
       });
     }
 
-    /** 交给应用去打开；路径定位不到时同样按不存在处理。 */
+    /** 退路：交给应用打开。 */
     function revealRemote(path) {
       var remote = sessionRemote();
       var session = remote === null ? null : remote.session;
       if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
-        revealViaRoute(path);
+        toast("无法打开文件管理器");
         return;
       }
       try {
         session.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
           if (result !== null && result !== undefined && result.ok === true) return;
-          if (isUnreachablePath(result === null || result === undefined ? null : result.error)) {
-            toast("目标文件不存在");
-            return;
-          }
-          revealViaRoute(path);
+          toast(isUnreachablePath(result === null || result === undefined ? null : result.error) ? "目标文件不存在" : "无法打开文件管理器");
         }, function (error) {
-          if (isUnreachablePath(error)) {
-            toast("目标文件不存在");
-            return;
-          }
-          revealViaRoute(path);
+          toast(isUnreachablePath(error) ? "目标文件不存在" : "无法打开文件管理器");
         });
       } catch (error) {
-        revealViaRoute(path);
+        toast("无法打开文件管理器");
       }
     }
 
     /** 应用对定位不到的路径返回这个结果。 */
     function isUnreachablePath(error) {
       return error !== null && error !== undefined && error.code === "gateway/bad-request";
-    }
-
-    /** 本地通道：请应用在系统文件管理器里选中路径。 */
-    function revealViaRoute(path) {
-      fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
-        if (!response.ok) toast("无法打开文件管理器");
-      }, function () {
-        toast("无法打开文件管理器");
-      });
     }
 
     /* ── interception ───────────────────────────────────────────────────── */
