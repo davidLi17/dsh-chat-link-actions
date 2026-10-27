@@ -121,8 +121,12 @@ export function revealCommand(path, platform = process.platform, facts = {}) {
     case 'darwin':
       if (isDirectory && !isSymbolicLink) return { command: 'open', args: [target] }
       return { command: 'open', args: ['-R', target] }
-    case 'win32':
-      return { command: 'explorer.exe', args: [encodeExplorerSelect(windowsTarget(target))] }
+    case 'win32': {
+      const spelled = windowsTarget(target)
+      /* explorer cannot /select a drive root; open the drive itself instead. */
+      if (/^[A-Za-z]:\\$/u.test(spelled)) return { command: 'explorer.exe', args: [spelled] }
+      return { command: 'explorer.exe', args: [encodeExplorerSelect(spelled)] }
+    }
     case 'android':
       return { command: 'termux-open', args: [directoryOf(target, platform)] }
     default:

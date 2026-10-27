@@ -488,7 +488,8 @@ window.__ModuleLoader__.load({
         copiedPath: "已复制路径",  // ui-copy-ignore
         copiedQuote: "已复制引用",  // ui-copy-ignore
         missing: "目标文件不存在",  // ui-copy-ignore
-        managerFailed: "无法打开文件管理器"  // ui-copy-ignore
+        managerFailed: "无法打开文件管理器",
+        clipboardFailed: "剪贴板不可用"  // ui-copy-ignore
       },
       en: {  // ui-copy-ignore
         menu: "File actions",  // ui-copy-ignore
@@ -498,7 +499,8 @@ window.__ModuleLoader__.load({
         copiedPath: "Path copied",  // ui-copy-ignore
         copiedQuote: "Reference copied",  // ui-copy-ignore
         missing: "File not found",  // ui-copy-ignore
-        managerFailed: "Could not open the file manager"  // ui-copy-ignore
+        managerFailed: "Could not open the file manager",
+        clipboardFailed: "Clipboard unavailable"  // ui-copy-ignore
       }
     };
 
@@ -713,7 +715,9 @@ window.__ModuleLoader__.load({
             if (inserted) return;
             navigator.clipboard.writeText(referenceText(path)).then(function () {
               toast(strings().copiedQuote);
-            }, function () {});
+            }, function () {
+              toast(strings().clipboardFailed);
+            });
           });
         } },
         { id: "reveal", label: strings().reveal, icon: "reveal", run: function () {
@@ -722,7 +726,9 @@ window.__ModuleLoader__.load({
         { id: "copy", label: strings().copy, icon: "copy", run: function () {
           navigator.clipboard.writeText(path).then(function () {
             toast(strings().copiedPath);
-          }, function () {});
+          }, function () {
+            toast(strings().clipboardFailed);
+          });
         } }
       ];
 
