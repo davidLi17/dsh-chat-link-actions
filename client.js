@@ -291,6 +291,8 @@ window.__ModuleLoader__.load({
         if (word === null) break;
         remaining = remaining.slice(space[0].length + word[0].length);
         if (!continuesPath(word[0])) break;
+        /* 中文句子在路径后继续说话时，不要把后面的词吞进路径。 */
+        if (/^[\u3400-\u9fff]+$/u.test(word[0]) && !/\.[A-Za-z0-9]{1,8}$/u.test(word[0])) break;
         var joined = best + " " + word[0];
         if (PATH_TAIL.test(joined)) best = joined;
         else if (!PATH_TAIL.test(best)) {
@@ -994,6 +996,7 @@ window.__ModuleLoader__.load({
 
     /** Prose needs a real path shape: /help and skill chips must stay native. */
     function looksLikePath(value) {
+      if (/^[A-Za-z]:[\\/]/u.test(value)) return true;
       var rest = value.replace(/^(?:[A-Za-z]:)?[\\/]+/u, "");
       if (rest === "") return false;
       if (/[\\/]/u.test(rest)) return true;
