@@ -941,17 +941,66 @@ window.__ModuleLoader__.load({
     }
 
     /** 在系统文件管理器里选中路径；路径不存在时直接告知。 */
+    /** 去掉末尾分隔符：菜单标题常带着它，文件路径带上就打不开了。 */
+    function withoutTrailingSeparator(path) {
+      var trimmed = path.replace(/[\\/]+$/u, "");
+      if (trimmed === "" || /^[A-Za-z]:$/u.test(trimmed)) return path;
+      return trimmed;
+    }
+
     function reveal(path) {
       probePath(path, function (kind) {
         if (kind === "missing") {
           toast(strings().missing);
           return;
         }
-        revealViaRoute(path);
+        revealNative(path, true);
       });
     }
 
-    /** 首选：直接请系统文件管理器选中。 */
+    /** 首选：应用的原生打开能力，macOS 访达、Windows 资源管理器同一套。 */
+    function revealNative(path, allowTrim) {
+      var remote = sessionRemote();
+      var session = remote === null ? null : remote.session;
+      if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
+        revealViaRoute(path);
+        return;
+      }
+      var pending;
+      try {
+        pending = session.openWorkspacePath({ path: path, action: "reveal" });
+      } catch (error) {
+        afterReveal(path, allowTrim, null, error);
+        return;
+      }
+      if (pending === null || pending === undefined || typeof pending.then !== "function") {
+        afterReveal(path, allowTrim, pending, null);
+        return;
+      }
+      pending.then(function (result) {
+        afterReveal(path, allowTrim, result, null);
+      }, function (error) {
+        afterReveal(path, allowTrim, null, error);
+      });
+    }
+
+    /** 成功即结束；失败先去掉末尾分隔符重试一次，再退到 HTTP 路由。 */
+    function afterReveal(path, allowTrim, result, error) {
+      if (isOpened(result)) return;
+      var trimmed = withoutTrailingSeparator(path);
+      if (allowTrim === true && trimmed !== path) {
+        revealNative(trimmed, false);
+        return;
+      }
+      revealViaRoute(trimmed);
+    }
+
+    /** 应用打开成功的回执：`{ opened: true }`，旧版本曾用 `{ ok: true }`。 */
+    function isOpened(result) {
+      return result !== null && result !== undefined && (result.opened === true || result.ok === true);
+    }
+
+    /** 退路：插件自己的 HTTP 路由（页面同源时可用）。 */
     function revealViaRoute(path) {
       fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
         if (response.ok) return;
@@ -959,35 +1008,10 @@ window.__ModuleLoader__.load({
           toast(strings().missing);
           return;
         }
-        revealRemote(path);
+        toast(strings().managerFailed);
       }, function () {
-        revealRemote(path);
+        toast(strings().managerFailed);
       });
-    }
-
-    /** 退路：交给应用打开。 */
-    function revealRemote(path) {
-      var remote = sessionRemote();
-      var session = remote === null ? null : remote.session;
-      if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
-        toast(strings().managerFailed);
-        return;
-      }
-      try {
-        session.openWorkspacePath({ path: path, action: "reveal" }).then(function (result) {
-          if (result !== null && result !== undefined && result.ok === true) return;
-          toast(isUnreachablePath(result === null || result === undefined ? null : result.error) ? strings().missing : strings().managerFailed);
-        }, function (error) {
-          toast(isUnreachablePath(error) ? strings().missing : strings().managerFailed);
-        });
-      } catch (error) {
-        toast(strings().managerFailed);
-      }
-    }
-
-    /** 应用对定位不到的路径返回这个结果。 */
-    function isUnreachablePath(error) {
-      return error !== null && error !== undefined && error.code === "gateway/bad-request";
     }
 
     /* ── interception ───────────────────────────────────────────────────── */

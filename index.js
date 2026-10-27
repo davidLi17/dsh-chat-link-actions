@@ -189,11 +189,41 @@ function reply(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
+/**
+ * Read a property the plugin did not declare in `inject`.
+ *
+ * A Cordis context throws on a plain `ctx.name` access for anything outside
+ * `inject`, so the optional test seam must be read defensively: a real context
+ * answers nothing, while a test context that carries the value directly or as
+ * a service still gets it.
+ */
+export function optionalMember(ctx, name) {
+  try {
+    const direct = ctx[name]
+    if (direct !== undefined) return direct
+  } catch (ignored) {
+    /* not injected: resolved below without the guard */
+  }
+  try {
+    return typeof ctx.get === 'function' ? ctx.get(name, false) : undefined
+  } catch (ignored) {
+    return undefined
+  }
+}
+
 export function apply(ctx) {
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
-  const warn = (message) => ctx.logger?.warn?.(message)
+  const warn = (message) => {
+    try {
+      const logger = optionalMember(ctx, 'logger')
+      logger?.warn?.(message)
+    } catch (ignored) {
+      /* logging must never take the plugin down */
+    }
+  }
   /** Test seam: a context may replace the process launcher with a recorder. */
-  const execute = typeof ctx.runLauncher === 'function' ? ctx.runLauncher : run
+  const seam = optionalMember(ctx, 'runLauncher')
+  const execute = typeof seam === 'function' ? seam : run
 
   /** Select the target; when selection is refused, at least open its directory. */
   const launch = async (path, facts = {}) => {
