@@ -332,7 +332,8 @@ window.__ModuleLoader__.load({
     var FIBER_KEY = /^__(?:reactFiber|reactInternalInstance)\$/;
 
     /** 可能带文件的属性名。 */
-    var PROP_KEYS = ["destination", "path", "src", "href"];
+    var PROP_KEYS = ["destination", "path", "absolutePath", "filePath", "localPath", "assetPath", "sourcePath", "src", "href"];
+    var PROP_CONTAINERS = ["file", "asset", "attachment", "source", "item"];
 
     /** Strip the line suffix a Markdown file link carries (`path#L12`). */
     function stripLineSuffix(value) {
@@ -343,10 +344,13 @@ window.__ModuleLoader__.load({
     /** Read the path a component's props carry, if any. */
     function pathFromProps(props) {
       if (props === null || typeof props !== "object") return null;
-      var file = props.file;
-      if (file !== null && typeof file === "object") {
-        var fromFile = normalizeCandidate(stripLineSuffix(file.path));
-        if (fromFile !== null) return fromFile;
+      for (var c = 0; c < PROP_CONTAINERS.length; c += 1) {
+        var box = props[PROP_CONTAINERS[c]];
+        if (box === null || typeof box !== "object") continue;
+        for (var k = 0; k < PROP_KEYS.length; k += 1) {
+          var nested = normalizeCandidate(stripLineSuffix(box[PROP_KEYS[k]]));
+          if (nested !== null) return nested;
+        }
       }
       for (var i = 0; i < PROP_KEYS.length; i += 1) {
         var fromProp = normalizeCandidate(stripLineSuffix(props[PROP_KEYS[i]]));

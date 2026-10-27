@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.2.13
+
+- 附件类芯片的路径从更多组件属性里取：视频/音频的 `asset.path`、附件的 `attachment.absolutePath`、`filePath`、`localPath`、`assetPath` 等写法都能认。
+
+
 ## 0.2.12
 
 - 代码块里带行号的路径（`file.cjs#L12`、`#L12-L20`、`#L12:5`）整条识别，行号不进路径，后面的中文不再被粘上。
