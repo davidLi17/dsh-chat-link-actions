@@ -263,6 +263,8 @@ window.__ModuleLoader__.load({
     }
 
     /** An absolute path written as plain text inside the clicked element. */
+    var proseCandidate = false;
+
     var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？（）【】《》]*)/u;
 
     /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
@@ -460,7 +462,10 @@ window.__ModuleLoader__.load({
       if (fromFiber !== null) return fromFiber;
       if (point !== null && point !== undefined && point.allowProse !== false) {
         var fromCaret = pathFromCaret(point.x, point.y);
-        if (fromCaret !== null) return fromCaret;
+        if (fromCaret !== null) {
+          proseCandidate = true;
+          return fromCaret;
+        }
       }
       return null;
     }
@@ -987,13 +992,23 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** Prose needs a real path shape: /help and skill chips must stay native. */
+    function looksLikePath(value) {
+      var rest = value.replace(/^(?:[A-Za-z]:)?[\\/]+/u, "");
+      if (rest === "") return false;
+      if (/[\\/]/u.test(rest)) return true;
+      return /\.[A-Za-z0-9]{1,8}$/u.test(rest);
+    }
+
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
       try {
         var inField = editableField(target);
+        proseCandidate = false;
         var path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
         if (path === null) return;
+        if (proseCandidate && !looksLikePath(path)) return;
         openMenu(path, event.clientX, event.clientY, { inField: inField, directory: directoryHint(target) });
         event.preventDefault();
         event.stopPropagation();
