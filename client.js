@@ -187,7 +187,7 @@ window.__ModuleLoader__.load({
         candidate = decodePercent(candidate);
         if (/^\/[A-Za-z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
       }
-      if (/^[A-Za-z]:(?!\/)/.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
+      if (/^[A-Za-z]:(?![\\/])/u.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
       return looksAbsolute(candidate) ? candidate : null;
     }
 
@@ -247,7 +247,7 @@ window.__ModuleLoader__.load({
     }
 
     /** An absolute path written as plain text inside the clicked element. */
-    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？]*)/u;
+    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？（）【】《》]*)/u;
 
     /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
     var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}|[\\/])$/u;
@@ -269,7 +269,7 @@ window.__ModuleLoader__.load({
       for (var round = 0; round < 3; round += 1) {
         var space = /^[ \t]+/u.exec(remaining);
         if (space === null) break;
-        var word = /^[^ \t"'\u201c\u201d\u300c\u300d<>\u3001\uff0c\u3002\uff1b\uff1a\uff01\uff1f]+/u.exec(remaining.slice(space[0].length));
+        var word = /^[^ \t"'“”「」<>，。；：！？、（）【】《》]+/u.exec(remaining.slice(space[0].length));
         if (word === null) break;
         remaining = remaining.slice(space[0].length + word[0].length);
         if (!continuesPath(word[0])) break;
