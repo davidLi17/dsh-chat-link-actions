@@ -281,6 +281,20 @@ window.__ModuleLoader__.load({
      * `C:\Users\apple\Desktop\a b.md` 这类带空格的路径，正则只吃到第一个空格。
      * 往后最多接三段，取「结尾仍然像一个路径」的最长一段。
      */
+    /** 往后看两段，判断中文词后面是否跟着文件名。 */
+    function nextWordsLookLikeFile(rest) {
+      var probe = rest;
+      for (var round = 0; round < 2; round += 1) {
+        var space = /^[ \t]+/u.exec(probe);
+        if (space === null) return false;
+        var word = /^[^ \t"'“”「」<>，。；：！？、（）【】《》]+/u.exec(probe.slice(space[0].length));
+        if (word === null) return false;
+        if (/\.[A-Za-z0-9]{1,8}$/u.test(word[0])) return true;
+        probe = probe.slice(space[0].length + word[0].length);
+      }
+      return false;
+    }
+
     function joinPathWords(text, rest) {
       var best = text;
       var remaining = rest;
@@ -291,8 +305,9 @@ window.__ModuleLoader__.load({
         if (word === null) break;
         remaining = remaining.slice(space[0].length + word[0].length);
         if (!continuesPath(word[0])) break;
-        /* 中文句子在路径后继续说话时，不要把后面的词吞进路径。 */
-        if (/^[\u3400-\u9fff]+$/u.test(word[0]) && !/\.[A-Za-z0-9]{1,8}$/u.test(word[0])) break;
+        /* 中文句子在路径后继续说话时，不要把后面的词吞进路径；
+           但后两段里出现扩展名，说明中文词其实是文件名的一部分。 */
+        if (/^[\u3400-\u9fff]+$/u.test(word[0]) && !/\.[A-Za-z0-9]{1,8}$/u.test(word[0]) && !nextWordsLookLikeFile(remaining)) break;
         var joined = best + " " + word[0];
         if (PATH_TAIL.test(joined)) best = joined;
         else if (!PATH_TAIL.test(best)) {
