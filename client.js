@@ -373,7 +373,9 @@ window.__ModuleLoader__.load({
     /** Strip the line suffix a Markdown file link carries (`path#L12`). */
     function stripLineSuffix(value) {
       if (typeof value !== "string") return value;
-      return value.replace(/#L[0-9]+(?:-L?[0-9]+)?(?::[0-9]+)?$/u, "");
+      var trimmed = value.replace(/#L[0-9]+(?:-L?[0-9]+)?(?::[0-9]+)?$/u, "");
+      /* Windows 风格的 match:line 后缀（a.md:12）也当行号剥掉。 */
+      return trimmed.replace(/(\.[A-Za-z0-9]{1,8}):[0-9]+(?:-[0-9]+)?$/u, "$1");
     }
 
     /** Read the path a component's props carry, if any. */
