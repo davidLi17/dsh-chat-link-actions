@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-link-actions",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "description": "Right-click actions on file links in the DSH transcript: quote the path into the composer, or reveal the file in the OS file manager. Menus are drawn in the app's own style, never the system one.",
   "type": "module",
   "main": "index.js",

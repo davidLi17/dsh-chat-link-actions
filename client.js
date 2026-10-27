@@ -170,6 +170,20 @@ window.__ModuleLoader__.load({
     /* ── resolving a file path out of the clicked node ──────────────────── */
 
     /** Trim a candidate down to the bare file path a link carries. */
+    /** Drop sentence punctuation that followed the path in prose. */
+    function trimProsePunctuation(value) {
+      var text = value.replace(/[.,;:!?]+$/u, "");
+      while (text.length > 1 && (text.charAt(text.length - 1) === ")" || text.charAt(text.length - 1) === "]")) {
+        var open = text.charAt(text.length - 1) === ")" ? "(" : "[";
+        var close = text.charAt(text.length - 1);
+        var opens = text.split(open).length - 1;
+        var closes = text.split(close).length - 1;
+        if (closes <= opens) break;
+        text = text.slice(0, -1);
+      }
+      return text;
+    }
+
     function normalizeCandidate(value) {
       if (typeof value !== "string") return null;
       var candidate = value.trim();
@@ -189,6 +203,7 @@ window.__ModuleLoader__.load({
       }
       if (/^[A-Za-z]:(?![\\/])/u.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
       if (!/^(?:[A-Za-z]:[\\/]?|[\\/]{1,2})$/u.test(candidate)) candidate = candidate.replace(/[\\/]+$/u, "");
+      candidate = trimProsePunctuation(candidate);
       return looksAbsolute(candidate) ? candidate : null;
     }
 
@@ -251,7 +266,7 @@ window.__ModuleLoader__.load({
     var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？（）【】《》]*)/u;
 
     /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
-    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}(?:#L\d+(?:-L?\d+)?(?::\d+)?)?|#L\d+(?::\d+)?|[\\/])$/u;
+    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}(?:#L\d+(?:-L?\d+)?(?::\d+)?)?[.,;:!?)\]]*|#L\d+(?:-L?\d+)?(?::\d+)?|[\\/])$/u;
 
     /** 一段词像不像同一路径的下一段：不以分隔符或盘符开头，也不带句子标点。 */
     function continuesPath(word) {
