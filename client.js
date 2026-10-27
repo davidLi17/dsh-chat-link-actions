@@ -179,6 +179,7 @@ window.__ModuleLoader__.load({
         candidate = candidate.slice(1, -1);
       }
       candidate = candidate.replace(/[.,;:!?，。；：！？]+$/u, "");
+      candidate = stripLineSuffix(candidate);
       if (/^file:\/\//i.test(candidate)) {
         candidate = candidate.replace(/^file:\/\/(?:localhost)?/i, "");
         candidate = decodePercent(candidate);
