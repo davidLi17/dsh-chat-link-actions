@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-link-actions",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "Right-click actions on file links in the DSH transcript: quote the path into the composer, or reveal the file in the OS file manager. Menus are drawn in the app's own style, never the system one.",
   "type": "module",
   "main": "index.js",
@@ -44,7 +44,10 @@
       "platform": "web"
     }
   },
-  "author": "regrevia",
+  "author": {
+    "name": "regrevia",
+    "url": "https://github.com/regrevia"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/regrevia/dsh-chat-link-actions.git"
