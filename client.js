@@ -250,7 +250,7 @@ window.__ModuleLoader__.load({
     var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？（）【】《》]*)/u;
 
     /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
-    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}|[\\/])$/u;
+    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}(?:#L\d+(?:-L?\d+)?(?::\d+)?)?|#L\d+(?::\d+)?|[\\/])$/u;
 
     /** 一段词像不像同一路径的下一段：不以分隔符或盘符开头，也不带句子标点。 */
     function continuesPath(word) {
@@ -337,7 +337,7 @@ window.__ModuleLoader__.load({
     /** Strip the line suffix a Markdown file link carries (`path#L12`). */
     function stripLineSuffix(value) {
       if (typeof value !== "string") return value;
-      return value.replace(/#L[0-9]+(?:-L[0-9]+)?$/u, "");
+      return value.replace(/#L[0-9]+(?:-L?[0-9]+)?(?::[0-9]+)?$/u, "");
     }
 
     /** Read the path a component's props carry, if any. */
