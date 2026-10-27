@@ -139,6 +139,37 @@ export function revealCommand(path, platform = process.platform, facts = {}) {
 }
 
 /** The argv that only opens the containing directory, used when selection fails. */
+/** 探测超时：网络盘/断连的共享目录 lstat 可能挂住几分钟，超时后按"未知"继续尝试打开。 */
+const PROBE_TIMEOUT_MS = 1500
+
+/**
+ * 文件系统探测，带超时上界。
+ * @param {string} target 绝对路径
+ * @returns {Promise<{state: 'file'|'directory'|'missing'|'unknown', facts: {isDirectory?: boolean, isSymbolicLink?: boolean}}>}
+ */
+export async function probePath(target) {
+  let timer
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS)
+    timer.unref?.()
+  })
+  const looked = (async () => {
+    const link = await lstat(target).catch(() => null)
+    const info = link === null ? null : await stat(target).catch(() => null)
+    return { link, info }
+  })()
+  const raced = await Promise.race([looked, timeout])
+  clearTimeout(timer)
+  if (raced === null) return { state: 'unknown', facts: {} }
+  const { link, info } = raced
+  if (link === null && info === null) return { state: 'missing', facts: {} }
+  const isDirectory = info !== null && info.isDirectory()
+  return {
+    state: isDirectory ? 'directory' : 'file',
+    facts: { isDirectory, isSymbolicLink: link !== null && link.isSymbolicLink() },
+  }
+}
+
 export function openDirectoryCommand(path, platform = process.platform) {
   const target = trimTrailingSeparators(path, platform)
   const directory = platform === 'win32'
@@ -268,18 +299,18 @@ export function apply(ctx) {
       if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'method' })
       try {
         const url = new URL(req.url ?? '/', 'http://dsh.internal')
-        if (url.searchParams.get('action') !== 'reveal') {
+        const action = url.searchParams.get('action')
+        if (action === 'trace') {
+          trace(`client ${String(url.searchParams.get('note') ?? '').slice(0, 400)}`)
+          return reply(res, 200, { ok: true })
+        }
+        if (action !== 'reveal') {
           return reply(res, 400, { ok: false, error: 'unknown action' })
         }
         const target = trimTrailingSeparators(requireAbsolute(url.searchParams.get('path')))
-        const link = await lstat(target).catch(() => null)
-        const info = link === null ? null : await stat(target).catch(() => null)
-        if (link === null && info === null) return reply(res, 404, { ok: false, error: 'not-found' })
-        const facts = {
-          isDirectory: info !== null && info.isDirectory(),
-          isSymbolicLink: link !== null && link.isSymbolicLink(),
-        }
-        const outcome = await launch(target, facts)
+        const probed = await probePath(target)
+        if (probed.state === 'missing') return reply(res, 404, { ok: false, error: 'not-found' })
+        const outcome = await launch(target, probed.facts)
         trace(`${outcome.ok ? 'opened' : 'launch-failed'} ${target}`)
         if (!outcome.ok) return reply(res, 500, { ok: false, error: 'launch-failed' })
         return reply(res, 200, { ok: true })

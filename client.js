@@ -753,8 +753,14 @@ window.__ModuleLoader__.load({
           paintActive();
         });
         button.addEventListener("click", function () {
+          report("menu-click " + item.id);
           closeMenu(false);
-          item.run();
+          try {
+            item.run();
+          } catch (error) {
+            report("run-threw " + item.id + " " + String((error && error.message) || error));
+            toast(strings().managerFailed);
+          }
         });
         panel.appendChild(button);
         buttons.push(button);
@@ -963,6 +969,19 @@ window.__ModuleLoader__.load({
       return trimmed;
     }
 
+    /** 点击路径上的每一步都留一行日志，静默失败就不再只能靠猜。 */
+    var reported = {};
+    function report(note) {
+      try {
+        var text = String(note);
+        if (reported[text] === true) return;
+        reported[text] = true;
+        fetch("/chat-link-actions?action=trace&note=" + encodeURIComponent(text), { method: "POST", keepalive: true }).catch(function () {});
+      } catch (ignored) {
+        /* diagnostics must never throw */
+      }
+    }
+
     /**
      * One click, one attempt: the native call can hang on a stalled link and the
      * fallback can stall too, so a watchdog guarantees the click always answers.
@@ -972,7 +991,9 @@ window.__ModuleLoader__.load({
     function reveal(path) {
       var attempt = { done: false };
       revealAttempt = attempt;
-      probePath(path, function (kind) {
+      report("reveal-start " + path);
+      try {
+        probePath(path, function (kind) {
         if (attempt.done || revealAttempt !== attempt) return;
         if (kind === "missing") {
           attempt.done = true;
@@ -980,7 +1001,12 @@ window.__ModuleLoader__.load({
           return;
         }
         revealNative(path, true, attempt);
-      });
+        });
+      } catch (error) {
+        attempt.done = true;
+        report("reveal-threw " + String((error && error.message) || error));
+        toast(strings().managerFailed);
+      }
       setTimeout(function () {
         if (attempt.done) return;
         attempt.done = true;
@@ -1056,7 +1082,9 @@ window.__ModuleLoader__.load({
         if (attempt !== undefined) attempt.done = true;
         if (message !== undefined) toast(message);
       };
+      report("route " + path);
       fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
+        report("route-status " + response.status + " " + path);
         if (response.ok) {
           finish();
           return;

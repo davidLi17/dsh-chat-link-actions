@@ -17,6 +17,7 @@ import {
   encodeExplorerSelect,
   openDirectoryCommand,
   optionalMember,
+  probePath,
   requireAbsolute,
   revealCommand,
   succeeded,
@@ -156,6 +157,16 @@ test('macOS 边界：带空格、中文、括号、井号的路径原样进 argv
     'open',
     '/Users/apple/My Dir',
   ])
+})
+
+test('探测：文件、目录、缺失各有明确状态，缺失才回 404', async () => {
+  await withTempFile(async ({ directory, file }) => {
+    assert.equal((await probePath(file)).state, 'file')
+    assert.equal((await probePath(directory)).state, 'directory')
+    assert.deepEqual(await probePath(join(directory, 'nope.md')), { state: 'missing', facts: {} })
+    assert.equal((await probePath(file)).facts.isDirectory, false)
+    assert.equal((await probePath(directory)).facts.isDirectory, true)
+  })
 })
 
 test('路径校验：只收本机绝对路径，拒绝相对路径与 NUL', () => {
