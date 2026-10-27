@@ -1119,7 +1119,7 @@ window.__ModuleLoader__.load({
 
     /* ── plugin entry ───────────────────────────────────────────────────── */
 
-    var inject = ["slots", "sessions", "remote", "remote.session", "remote.workspaceFiles"];
+    var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
       rootContext = ctx;
