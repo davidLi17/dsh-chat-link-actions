@@ -15,6 +15,8 @@ import { join } from 'node:path'
 import {
   apply,
   encodeExplorerSelect,
+  encodeWindowsArgument,
+  extendedWindowsPath,
   openDirectoryCommand,
   optionalMember,
   probePath,
@@ -286,3 +288,27 @@ test('路由：两个启动器都失败时回 500 并只记日志', async () => 
     assert.equal(warnings.length, 2)
   })
 })
+
+test('Windows：verbatim 前缀不解释 . 与 ..，盘符相对路径不扩展', () => {
+  /* `\\?\` 是 verbatim 形式：../. 会原样交给 Shell，加前缀反而改变含义。 */
+  assert.equal(extendedWindowsPath('C:\\work\\..\\report.md'), 'C:\\work\\..\\report.md')
+  assert.equal(extendedWindowsPath('C:\\work\\.\\report.md'), 'C:\\work\\.\\report.md')
+  /* `C:relative` 没有可扩展的盘根。 */
+  assert.equal(extendedWindowsPath('C:relative\\x.md'), 'C:relative\\x.md')
+  /* 盘根 + 超长或带尾随空格时才加前缀。 */
+  const long = `C:\\work\\${'a'.repeat(260)}\\x.md`
+  assert.ok(extendedWindowsPath(long).startsWith('\\\\?\\C:\\'))
+  assert.equal(extendedWindowsPath('\\\\server\\share\\x. '), '\\\\?\\UNC\\server\\share\\x. ')
+  assert.equal(extendedWindowsPath('\\\\?\\C:\\work\\x.md'), '\\\\?\\C:\\work\\x.md')
+})
+
+test('Windows：verbatim 盘根保留分隔符，explorer 只加一层引号', () => {
+  assert.deepEqual(flat(revealCommand('C:\\', 'win32')), ['explorer.exe', 'C:\\'])
+  assert.deepEqual(flat(revealCommand('\\\\?\\C:\\', 'win32')), ['explorer.exe', '\\\\?\\C:\\'])
+  assert.equal(encodeWindowsArgument('C:\\a b\\x.md'), '"C:\\a b\\x.md"')
+  assert.equal(encodeWindowsArgument('C:\\a\\x.md'), 'C:\\a\\x.md')
+  assert.equal(encodeExplorerSelect('C:\\a b\\x.md'), '/select,"C:\\a b\\x.md"')
+  /* 目录自己就是目标：整条路径也要按 explorer 的规则加引号。 */
+  assert.deepEqual(flat(revealCommand('C:\\a b', 'win32', { isDirectory: true })), ['explorer.exe', '"C:\\a b"'])
+})
+

@@ -47,6 +47,8 @@ function trimTrailingSeparators(path, platform = process.platform) {
   const trimmed = path.replace(pattern, '')
   if (trimmed === '') return path
   if (platform === 'win32' && /^[a-z]:$/i.test(trimmed)) return `${trimmed}\\`
+  /* `\\?\C:` 少一个分隔符就不再是盘根，verbatim 形式不认这种写法。 */
+  if (platform === 'win32' && /^\\\\\?\\[a-z]:$/i.test(trimmed)) return `${trimmed}\\`
   return trimmed
 }
 
@@ -82,10 +84,16 @@ export function normalizeWindowsPath(path) {
  */
 export function extendedWindowsPath(path) {
   if (path.startsWith('\\\\?\\')) return path
+  const isUnc = path.startsWith('\\\\')
+  /* 盘符形式必须是「盘根 + 绝对路径」，`C:relative` 没有可扩展的根。 */
+  if (!isUnc && !/^[A-Za-z]:\\/.test(path)) return path
+  /* verbatim 形式不再解释 `.`/`..`：这两段保持原样交给 Shell 解析。 */
+  const segments = path.split('\\')
+  if (segments.some((segment) => segment === '.' || segment === '..')) return path
   const touchesLimit = path.length > 255
-  const awkward = path.split('\\').some((segment) => /[ .]$/.test(segment))
+  const awkward = segments.some((segment) => /[ .]$/.test(segment))
   if (!touchesLimit && !awkward) return path
-  if (path.startsWith('\\\\')) return `\\\\?\\UNC\\${path.slice(2)}`
+  if (isUnc) return `\\\\?\\UNC\\${path.slice(2)}`
   return `\\\\?\\${path}`
 }
 
@@ -108,6 +116,16 @@ export function encodeExplorerSelect(path) {
 }
 
 /**
+ * Quote one bare argument for explorer's own parser.
+ *
+ * The launcher passes Windows arguments verbatim (see `run`), so this is the
+ * only layer that adds quotes — never Node, never cmd.
+ */
+export function encodeWindowsArgument(value) {
+  return /[\s"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+/**
  * The argv that selects `path` in the platform's file manager.
  *
  * `facts.isDirectory` / `facts.isSymbolicLink` come from stat/lstat: macOS opens
@@ -126,9 +144,11 @@ export function revealCommand(path, platform = process.platform, facts = {}) {
     case 'win32': {
       const spelled = windowsTarget(target)
       /* 目录自己就是目标：让资源管理器打开它，而不是在父目录里选中它。 */
-      if (isDirectory && !isSymbolicLink) return { command: 'explorer.exe', args: [spelled] }
+      if (isDirectory && !isSymbolicLink) return { command: 'explorer.exe', args: [encodeWindowsArgument(spelled)] }
       /* explorer cannot /select a drive root; open the drive itself instead. */
-      if (/^[A-Za-z]:\\$/u.test(spelled)) return { command: 'explorer.exe', args: [spelled] }
+      if (/^(?:[A-Za-z]:\\|\\\\\?\\[A-Za-z]:\\)$/u.test(spelled)) {
+        return { command: 'explorer.exe', args: [encodeWindowsArgument(spelled)] }
+      }
       return { command: 'explorer.exe', args: [encodeExplorerSelect(spelled)] }
     }
     case 'android':
@@ -207,7 +227,13 @@ function describeFailure(result) {
 /** Run one launcher and resolve its outcome instead of throwing. */
 function run(command, args) {
   return new Promise((resolve) => {
-    execFile(command, args, { timeout: LAUNCH_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+    execFile(command, args, {
+      timeout: LAUNCH_TIMEOUT_MS,
+      /* explorer 解析的是自己那一层命令行：参数已按它的规则拼好，
+         再让 Node 加一层引号会变成 `\"`，路径就被截断。 */
+      windowsVerbatimArguments: process.platform === 'win32',
+      windowsHide: false
+    }, (error, stdout, stderr) => {
       if (error === null) {
         resolve({ ok: true })
         return

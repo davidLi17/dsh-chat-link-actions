@@ -148,22 +148,35 @@ window.__ModuleLoader__.load({
       return after.start !== before.start || after.end !== before.end;
     }
 
-    /** Insert the reference into a live composer. Returns true on success. */
-    function quoteIntoComposer(path, knownDirectory) {
-      var candidates = draftCandidates();
-      for (var i = 0; i < candidates.length; i += 1) {
-        var sessionId = candidates[i].sessionId;
-        var actions = candidates[i].actions;
-        try {
-          if (typeof actions.captureInsertion !== "function") continue;
-          if (insertChip(sessionId, actions, path, knownDirectory)) return true;
-          var span = actions.captureInsertion();
-          if (span === null || span === undefined) continue;
-          if (actions.insertText(referenceText(path) + " ", span) === true) return true;
-        } catch (error) {
-          /* try the next session's composer */
-        }
+    /**
+     * Insert into the composer of the session the click came from — never into
+     * "whichever composer happens to be writable". A reference that lands in
+     * another conversation is worse than a failed click, so an unusable source
+     * session stops here with a message instead of trying elsewhere.
+     */
+    function quoteIntoComposer(path, knownDirectory, sessionId) {
+      var actions = sessionId === undefined || sessionId === null ? undefined : drafts.get(sessionId);
+      if (actions === undefined) {
+        report("quote-no-session " + String(sessionId));
+        toast(strings().quoteFailed);
+        return false;
       }
+      try {
+        if (typeof actions.captureInsertion !== "function") {
+          toast(strings().quoteFailed);
+          return false;
+        }
+        if (insertChip(sessionId, actions, path, knownDirectory)) return true;
+        var span = actions.captureInsertion();
+        if (span === null || span === undefined) {
+          toast(strings().quoteFailed);
+          return false;
+        }
+        if (actions.insertText(referenceText(path) + " ", span) === true) return true;
+      } catch (error) {
+        report("quote-threw " + String((error && error.message) || error));
+      }
+      toast(strings().quoteFailed);
       return false;
     }
 
@@ -184,7 +197,31 @@ window.__ModuleLoader__.load({
       return text;
     }
 
-    function normalizeCandidate(value) {
+    /**
+     * A `file:` URI names exactly one path, so it has one parser instead of a
+     * per-entry heuristic. `URL.pathname` alone is not enough: it turns
+     * `file:///C:/a` into `/C:/a` and drops the server of `file://srv/share/a`.
+     */
+    function decodeFileUri(href) {
+      if (typeof href !== "string") return null;
+      var match = /^file:(\/\/[^/]*)?(\/[^?#]*)?/i.exec(href);
+      if (match === null) return null;
+      var authority = match[1] === undefined ? "" : match[1].slice(2);
+      var rest = decodePercent(match[2] === undefined ? "/" : match[2]);
+      if (authority !== "" && authority.toLowerCase() !== "localhost") {
+        return "\\\\" + authority + rest.replace(/\//g, "\\");
+      }
+      if (/^\/[A-Za-z]:[\\/]/.test(rest)) return rest.slice(1);
+      return rest;
+    }
+
+    /**
+     * One candidate → the path it names. Nothing here may invent a different
+     * path: no separator is added and no file-name character is stripped.
+     * Sentence punctuation is trimmed only for prose (`prose === true`), where
+     * the path really is embedded in a sentence.
+     */
+    function normalizeCandidate(value, prose) {
       if (typeof value !== "string") return null;
       var candidate = value.trim();
       if (candidate === "") return null;
@@ -194,17 +231,19 @@ window.__ModuleLoader__.load({
       }
       if (/^["'<]/u.test(candidate)) candidate = candidate.slice(1);
       if (/>$/u.test(candidate)) candidate = candidate.slice(0, -1);
-      candidate = candidate.replace(/[.,;:!?，。；：！？]+$/u, "");
-      candidate = stripLineSuffix(candidate);
       if (/^file:\/\//i.test(candidate)) {
-        candidate = candidate.replace(/^file:\/\/(?:localhost)?/i, "");
-        candidate = decodePercent(candidate);
-        if (/^\/[A-Za-z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
+        var fromUri = decodeFileUri(candidate);
+        if (fromUri !== null) candidate = fromUri;
       }
-      if (/^[A-Za-z]:(?![\\/])/u.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
+      candidate = stripLineSuffix(candidate);
+      if (prose === true) candidate = proseCandidatePath(candidate);
       if (!/^(?:[A-Za-z]:[\\/]?|[\\/]{1,2})$/u.test(candidate)) candidate = candidate.replace(/[\\/]+$/u, "");
-      candidate = trimProsePunctuation(candidate);
       return looksAbsolute(candidate) ? candidate : null;
+    }
+
+    /** 正文里取出的路径：句读属于句子，不属于文件名。 */
+    function proseCandidatePath(value) {
+      return trimProsePunctuation(value.replace(/[.,;:!?，。；：！？]+$/u, ""));
     }
 
     function looksAbsolute(value) {
@@ -234,7 +273,10 @@ window.__ModuleLoader__.load({
           var fromNamed = normalizeCandidate(url.searchParams.get(["file", "filepath", "abs", "target"][i]));
           if (fromNamed !== null) return fromNamed;
         }
-        if (url.protocol === "file:") return normalizeCandidate(decodeURIComponent(url.pathname));
+        if (url.protocol === "file:") {
+          var fromFile = decodeFileUri(href);
+          return fromFile === null ? null : normalizeCandidate(fromFile);
+        }
         /* 尾斜杠说明指向目录，没有扩展名也接受。 */
         if (url.origin === location.origin && looksAbsolute(url.pathname) && (/\.[A-Za-z0-9]{1,6}$/.test(url.pathname) || /\/$/.test(url.pathname))) {
           return normalizeCandidate(decodeURIComponent(url.pathname));
@@ -268,9 +310,6 @@ window.__ModuleLoader__.load({
 
     var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？（）【】《》]*)/u;
 
-    /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
-    var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}(?:#L\d+(?:-L?\d+)?(?::\d+)?)?[.,;:!?)\]]*|#L\d+(?:-L?\d+)?(?::\d+)?|[\\/])$/u;
-
     /** 一段词像不像同一路径的下一段：不以分隔符或盘符开头，也不带句子标点。 */
     function continuesPath(word) {
       if (word === "" || /^[\/"'\u201c\u201d\u300c\u300d<>]/u.test(word)) return false;
@@ -280,7 +319,7 @@ window.__ModuleLoader__.load({
 
     /**
      * `C:\Users\apple\Desktop\a b.md` 这类带空格的路径，正则只吃到第一个空格。
-     * 往后最多接三段，取「结尾仍然像一个路径」的最长一段。
+     * 往后最多接三段，逐段追加——跳过中间一段就会拼出另一条路径。
      */
     /** 往后看两段，判断中文词后面是否跟着文件名。 */
     function nextWordsLookLikeFile(rest) {
@@ -309,12 +348,7 @@ window.__ModuleLoader__.load({
         /* 中文句子在路径后继续说话时，不要把后面的词吞进路径；
            但后两段里出现扩展名，说明中文词其实是文件名的一部分。 */
         if (/^[\u3400-\u9fff]+$/u.test(word[0]) && !/\.[A-Za-z0-9]{1,8}$/u.test(word[0]) && !nextWordsLookLikeFile(remaining)) break;
-        var joined = best + " " + word[0];
-        if (PATH_TAIL.test(joined)) best = joined;
-        else if (!PATH_TAIL.test(best)) {
-          /* 还没成句：继续接，等扩展名出现 */
-          best = joined;
-        }
+        best = best + " " + word[0];
       }
       return best;
     }
@@ -359,7 +393,7 @@ window.__ModuleLoader__.load({
         if (hit[0].length === 0) matcher.lastIndex += 1;
       }
       for (var i = 0; i < bounds.length; i += 1) {
-        if (offset >= bounds[i].start && offset <= bounds[i].end) return normalizeCandidate(bounds[i].text);
+        if (offset >= bounds[i].start && offset <= bounds[i].end) return normalizeCandidate(bounds[i].text, true);
       }
       return null;
     }
@@ -550,6 +584,8 @@ window.__ModuleLoader__.load({
         copiedPath: "已复制路径",  // ui-copy-ignore
         copiedQuote: "已复制引用",  // ui-copy-ignore
         missing: "目标文件不存在",  // ui-copy-ignore
+        quoteFailed: "当前会话无法插入引用",
+        revealPending: "已请求打开，窗口可能稍后出现",
         managerFailed: "无法打开文件管理器",
         clipboardFailed: "剪贴板不可用"  // ui-copy-ignore
       },
@@ -561,6 +597,8 @@ window.__ModuleLoader__.load({
         copiedPath: "Path copied",  // ui-copy-ignore
         copiedQuote: "Reference copied",  // ui-copy-ignore
         missing: "File not found",  // ui-copy-ignore
+        quoteFailed: "This conversation cannot take the reference",
+        revealPending: "Open requested; the window may appear shortly",
         managerFailed: "Could not open the file manager",
         clipboardFailed: "Clipboard unavailable"  // ui-copy-ignore
       }
@@ -776,17 +814,10 @@ window.__ModuleLoader__.load({
 
       var items = [
         { id: "quote", label: strings().quote, icon: "quote", run: function () {
-          probePath(path, function (kind) {
-            var directory = kind === "directory" ? true : kind === "file" ? false : settings.directory;
-            if (directory === undefined && kind !== "file" && kind !== "directory") directory = guessDirectory(path);
-            var inserted = quoteIntoComposer(path, directory);
-            if (inserted) return;
-            navigator.clipboard.writeText(referenceText(path)).then(function () {
-              toast(strings().copiedQuote);
-            }, function () {
-              toast(strings().clipboardFailed);
-            });
-          });
+          var sessionId = settings.sessionId;
+          var directory = settings.directory;
+          if (directory === undefined || directory === null) directory = guessDirectory(path);
+          quoteIntoComposer(path, directory, sessionId);
         } },
         { id: "reveal", label: strings().reveal, icon: "reveal", run: function () {
           reveal(path);
@@ -877,100 +908,6 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    /** 路径是否存在：先当文件问，再当目录问；多个会话依次问，问到一个就够。 */
-    /** 某个会话自己的 workspaceFiles；拿不到时退回当前会话的那一份。 */
-    function filesFor(sessionId, fallback) {
-      try {
-        var context = rootContext === null || typeof rootContext.sessions !== "object" || rootContext.sessions === null
-          ? null
-          : rootContext.sessions.binding(sessionId);
-        var sessionContext = context === null || context === undefined ? null : context.ctx;
-        var remote = sessionContext === null || sessionContext === undefined ? null : sessionContext.remote;
-        var files = null;
-        try {
-          files = remote === null || remote === undefined ? null : remote.workspaceFiles;
-        } catch (error) {
-          files = null;
-        }
-        if (files !== null && files !== undefined && typeof files.stat === "function") return files;
-      } catch (error) {
-        /* fall through to the shared remote */
-      }
-      return fallback;
-    }
-
-    function probePath(path, done) {
-      var remote = sessionRemote();
-      var shared = null;
-      try {
-        shared = remote === null || remote === undefined ? null : remote.workspaceFiles;
-      } catch (error) {
-        shared = null;
-      }
-      var candidates = draftCandidates();
-      if (candidates.length === 0) {
-        done("unknown");
-        return;
-      }
-      var settled = false;
-      var position = 0;
-      var probeTimer = setTimeout(function () {
-        finish("unknown");
-      }, 700);
-      function finish(kind) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(probeTimer);
-        done(kind);
-      }
-      function next() {
-        if (settled) return;
-        if (position >= candidates.length) {
-          finish("missing");
-          return;
-        }
-        var sessionId = candidates[position].sessionId;
-        position += 1;
-        var files = filesFor(sessionId, shared);
-        if (files === null || files === undefined || typeof files.stat !== "function") {
-          next();
-          return;
-        }
-        var moved = false;
-        function move() {
-          if (settled || moved) return;
-          moved = true;
-          next();
-        }
-        function askDirectory() {
-          try {
-            files.list(sessionId, path).then(function () {
-              finish("directory");
-            }, move);
-          } catch (error) {
-            move();
-          }
-        }
-        try {
-          files.stat(sessionId, path).then(function () {
-            /* stat 不区分文件与目录：用列举确认，列得出来就是目录。 */
-            files.list(sessionId, path).then(function () {
-              finish("directory");
-            }, function (error) {
-              /* 只有后端明确说「不是目录」才算文件；别的失败当作问不到。 */
-              var code = error === null || error === undefined ? "" : String(error.code === undefined ? "" : error.code);
-              var message = error === null || error === undefined ? "" : String(error.message === undefined ? "" : error.message);
-              if (/not-directory/i.test(code) || /not-directory|is a file/i.test(message)) finish("file");
-              else finish("unknown");
-            });
-          }, askDirectory);
-        } catch (error) {
-          askDirectory();
-        }
-      }
-      next();
-    }
-
     /** 在系统文件管理器里选中路径；路径不存在时直接告知。 */
     /** 去掉末尾分隔符：菜单标题常带着它，文件路径带上就打不开了。 */
     function withoutTrailingSeparator(path) {
@@ -993,33 +930,32 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One click, one attempt: the native call can hang on a stalled link and the
-     * fallback can stall too, so a watchdog guarantees the click always answers.
+     * One click performs at most one desktop action. A timeout means "result
+     * unknown", not "did not run": the window may still appear, so no second
+     * channel is fired and a late success is never turned into a failure toast.
      */
-    var revealAttempt = null;
-
     function reveal(path) {
       var attempt = { done: false };
-      revealAttempt = attempt;
-      report("reveal-start " + path);
+      var target = withoutTrailingSeparator(path);
+      report("reveal-start " + target);
       try {
-        /* 打开文件不需要探测存在性：多一次护栏读就把整个点击赔进去了。 */
-        revealNative(path, true, attempt);
+        revealNative(target, attempt);
       } catch (error) {
-        attempt.done = true;
+        finishAttempt(attempt, strings().managerFailed);
         report("reveal-threw " + String((error && error.message) || error));
-        toast(strings().managerFailed);
       }
-      setTimeout(function () {
-        if (attempt.done) return;
-        attempt.done = true;
-        toast(strings().managerFailed);
-      }, 4500);
+    }
+
+    function finishAttempt(attempt, message) {
+      if (attempt.done) return false;
+      attempt.done = true;
+      if (message !== undefined) toast(message);
+      return true;
     }
 
     /** 首选：应用的原生打开能力，macOS 访达、Windows 资源管理器同一套。 */
-    function revealNative(path, allowTrim, attempt) {
-      if (attempt !== undefined && attempt.done) return;
+    function revealNative(path, attempt) {
+      if (attempt.done) return;
       var remote = sessionRemote();
       var session = null;
       try {
@@ -1031,86 +967,95 @@ window.__ModuleLoader__.load({
         revealViaRoute(path, attempt);
         return;
       }
-      var pending;
-      try {
-        pending = session.openWorkspacePath({ path: path, action: "reveal" });
-      } catch (error) {
-        afterReveal(path, allowTrim, null, error, attempt);
-        return;
-      }
-      if (pending === null || pending === undefined || typeof pending.then !== "function") {
-        afterReveal(path, allowTrim, pending, null, attempt);
-        return;
-      }
-      /* 原生调用不该成为终点：等不到回执就走退路。 */
       var settled = false;
       var timer = setTimeout(function () {
-        if (settled) return;
+        if (settled || attempt.done) return;
         settled = true;
-        afterReveal(path, allowTrim, null, new Error("timeout"), attempt);
+        report("reveal-timeout " + path);
+        /* 没有回执不等于没有执行：这里不再换通道开第二次。 */
+        finishAttempt(attempt, strings().revealPending);
       }, 2500);
       var stop = function (result, error) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        afterReveal(path, allowTrim, result, error, attempt);
+        afterReveal(path, result, error, attempt);
       };
-      pending.then(function (result) {
-        stop(result, null);
-      }, function (error) {
-        stop(null, error);
-      });
-    }
-
-    /** 成功即结束；失败先去掉末尾分隔符重试一次，再退到 HTTP 路由。 */
-    function afterReveal(path, allowTrim, result, error, attempt) {
-      if (attempt !== undefined && attempt.done) return;
-      if (isOpened(result)) {
-        if (attempt !== undefined) attempt.done = true;
-        return;
-      }
-      var trimmed = withoutTrailingSeparator(path);
-      if (allowTrim === true && trimmed !== path) {
-        revealNative(trimmed, false, attempt);
-        return;
-      }
-      revealViaRoute(trimmed, attempt);
-    }
-
-    /** 应用打开成功的回执：`{ opened: true }`，旧版本曾用 `{ ok: true }`。 */
-    function isOpened(result) {
-      return result !== null && result !== undefined && (result.opened === true || result.ok === true);
-    }
-
-    /** 退路：插件自己的 HTTP 路由（页面同源时可用）。 */
-    function revealViaRoute(path, attempt) {
-      if (attempt !== undefined && attempt.done) return;
-      var finish = function (message) {
-        if (attempt !== undefined && attempt.done) return;
-        if (attempt !== undefined) attempt.done = true;
-        if (message !== undefined) toast(message);
-      };
-      report("route " + path);
-      fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
-        report("route-status " + response.status + " " + path);
-        if (response.ok) {
-          finish();
+      try {
+        var pending = session.openWorkspacePath({ path: path, action: "reveal" });
+        if (pending === null || pending === undefined || typeof pending.then !== "function") {
+          afterReveal(path, pending, null, attempt);
           return;
         }
-        finish(response.status === 404 ? strings().missing : strings().managerFailed);
-      }, function () {
-        finish(strings().managerFailed);
-      });
+        pending.then(function (result) {
+          stop(result, null);
+        }, function (error) {
+          stop(null, error);
+        });
+      } catch (error) {
+        afterReveal(path, null, error, attempt);
+      }
     }
 
-    /* ── interception ───────────────────────────────────────────────────── */
+    /** 回执：成功结束；明确失败就提示；只有「不支持」才换后备通道。 */
+    function afterReveal(path, result, error, attempt) {
+      if (attempt.done) return;
+      if (isOpened(result)) {
+        finishAttempt(attempt);
+        return;
+      }
+      if (isUnsupported(result, error)) {
+        revealViaRoute(path, attempt);
+        return;
+      }
+      report("reveal-failed " + describeReveal(result, error));
+      finishAttempt(attempt, strings().managerFailed);
+    }
 
-    var EDITABLE_SELECTOR = "textarea,input,[contenteditable=''],[contenteditable=true],[contenteditable=plaintext-only]";
+    function isUnsupported(result, error) {
+      var text = describeReveal(result, error).toLowerCase();
+      if (text === "") return true;
+      return /not[- ]?supported|unsupported|not[- ]?implemented|no such (?:method|function)|unknown (?:method|action)/.test(text);
+    }
 
-    /** 输入框里右键通常是要粘贴：只有点到引用芯片这类带路径的元素才接管。 */
-    function editableField(node) {
-      if (node instanceof Element && node.closest(EDITABLE_SELECTOR) !== null) return true;
-      return node instanceof Element && node.isContentEditable;
+    function describeReveal(result, error) {
+      var source = error !== null && error !== undefined ? error : result;
+      if (source === null || source === undefined || typeof source !== "object") return "";
+      var parts = [source.code, source.message];
+      if (source.error !== null && typeof source.error === "object") {
+        parts.push(source.error.code, source.error.message);
+      }
+      return parts.filter(function (part) {
+        return part !== undefined && part !== null && part !== "";
+      }).join(" ");
+    }
+
+    /** 后备：插件自己的 HTTP 路由（页面同源时可用）。 */
+    function revealViaRoute(path, attempt) {
+      if (attempt.done) return;
+      report("route " + path);
+      var settle = function (message) {
+        if (message === undefined) {
+          finishAttempt(attempt);
+          return;
+        }
+        report("route-failed " + message);
+        finishAttempt(attempt, message);
+      };
+      try {
+        fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
+          report("route-status " + response.status + " " + path);
+          if (response.ok) {
+            settle();
+            return;
+          }
+          settle(response.status === 404 ? strings().missing : strings().managerFailed);
+        }, function () {
+          settle(strings().managerFailed);
+        });
+      } catch (error) {
+        settle(strings().managerFailed);
+      }
     }
 
     /** 插件自己的故障只记一条日志，绝不让页面上的右键整体失效。 */
@@ -1134,6 +1079,22 @@ window.__ModuleLoader__.load({
       return /\.[A-Za-z0-9]{1,8}$/u.test(rest);
     }
 
+    /** 右键来自哪个会话：先看组件属性，再退回最近渲染的输入框。 */
+    function sessionOfNode(node) {
+      for (var owner = node; owner !== null && owner !== undefined && owner !== document.body; owner = owner.parentElement) {
+        if (owner.nodeType !== 1) continue;
+        var fiber = fiberOf(owner);
+        for (var step = 0, cursor = fiber; step < 12 && cursor !== null && cursor !== undefined; step += 1, cursor = cursor.return) {
+          var props = cursor.memoizedProps;
+          if (props === null || typeof props !== "object") continue;
+          if (typeof props.sessionId === "string" && props.sessionId !== "") return props.sessionId;
+          var boxed = props.session;
+          if (boxed !== null && typeof boxed === "object" && typeof boxed.id === "string" && boxed.id !== "") return boxed.id;
+        }
+      }
+      return activeSession;
+    }
+
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
@@ -1143,7 +1104,11 @@ window.__ModuleLoader__.load({
         var path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
         if (path === null) return;
         if (proseCandidate && !looksLikePath(path)) return;
-        openMenu(path, event.clientX, event.clientY, { inField: inField, directory: directoryHint(target) });
+        openMenu(path, event.clientX, event.clientY, {
+          inField: inField,
+          directory: directoryHint(target),
+          sessionId: sessionOfNode(target)
+        });
         event.preventDefault();
         event.stopPropagation();
       } catch (error) {
@@ -1176,7 +1141,20 @@ window.__ModuleLoader__.load({
       });
     }
 
-    module.exports = { inject: inject, apply: apply };
+    /* 纯路径层只是给回归测试用：它不碰页面，也不进 UI。 */
+    var testSeams = {};
+    testSeams.normalizeCandidate = function (value) { return normalizeCandidate(value, true); };
+    testSeams.normalizeStrict = function (value) { return normalizeCandidate(value, false); };
+    testSeams.decodeFileUri = decodeFileUri;
+    testSeams.decodePathFromHref = decodePathFromHref;
+    testSeams.joinPathWords = joinPathWords;
+    testSeams.stripLineSuffix = stripLineSuffix;
+    testSeams.looksLikePath = looksLikePath;
+    testSeams.withoutTrailingSeparator = withoutTrailingSeparator;
+    module.exports = {};
+    module.exports.inject = inject;
+    module.exports.apply = apply;
+    module.exports.__paths = testSeams;
     return module.exports;
   }
 });
