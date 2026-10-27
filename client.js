@@ -886,7 +886,12 @@ window.__ModuleLoader__.load({
           : rootContext.sessions.binding(sessionId);
         var sessionContext = context === null || context === undefined ? null : context.ctx;
         var remote = sessionContext === null || sessionContext === undefined ? null : sessionContext.remote;
-        var files = remote === null || remote === undefined ? null : remote.workspaceFiles;
+        var files = null;
+        try {
+          files = remote === null || remote === undefined ? null : remote.workspaceFiles;
+        } catch (error) {
+          files = null;
+        }
         if (files !== null && files !== undefined && typeof files.stat === "function") return files;
       } catch (error) {
         /* fall through to the shared remote */
@@ -896,7 +901,12 @@ window.__ModuleLoader__.load({
 
     function probePath(path, done) {
       var remote = sessionRemote();
-      var shared = remote === null ? null : remote.workspaceFiles;
+      var shared = null;
+      try {
+        shared = remote === null || remote === undefined ? null : remote.workspaceFiles;
+      } catch (error) {
+        shared = null;
+      }
       var candidates = draftCandidates();
       if (candidates.length === 0) {
         done("unknown");
@@ -993,15 +1003,8 @@ window.__ModuleLoader__.load({
       revealAttempt = attempt;
       report("reveal-start " + path);
       try {
-        probePath(path, function (kind) {
-        if (attempt.done || revealAttempt !== attempt) return;
-        if (kind === "missing") {
-          /* 探测只看得到已打开会话的工作区：路径可能在 /tmp 或别处，交给宿主判定。 */
-          revealViaRoute(withoutTrailingSeparator(path), attempt);
-          return;
-        }
+        /* 打开文件不需要探测存在性：多一次护栏读就把整个点击赔进去了。 */
         revealNative(path, true, attempt);
-        });
       } catch (error) {
         attempt.done = true;
         report("reveal-threw " + String((error && error.message) || error));
@@ -1018,7 +1021,12 @@ window.__ModuleLoader__.load({
     function revealNative(path, allowTrim, attempt) {
       if (attempt !== undefined && attempt.done) return;
       var remote = sessionRemote();
-      var session = remote === null ? null : remote.session;
+      var session = null;
+      try {
+        session = remote === null || remote === undefined ? null : remote.session;
+      } catch (error) {
+        session = null;
+      }
       if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
         revealViaRoute(path, attempt);
         return;
@@ -1146,7 +1154,7 @@ window.__ModuleLoader__.load({
 
     /* ── plugin entry ───────────────────────────────────────────────────── */
 
-    var inject = ["slots", "sessions", "remote", "remote.session"];
+    var inject = ["slots", "sessions", "remote", "remote.session", "remote.workspaceFiles"];
 
     function apply(ctx) {
       rootContext = ctx;
