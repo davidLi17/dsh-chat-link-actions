@@ -123,14 +123,16 @@ export function revealCommand(path, platform = process.platform, facts = {}) {
       return { command: 'open', args: ['-R', target] }
     case 'win32': {
       const spelled = windowsTarget(target)
+      /* 目录自己就是目标：让资源管理器打开它，而不是在父目录里选中它。 */
+      if (isDirectory && !isSymbolicLink) return { command: 'explorer.exe', args: [spelled] }
       /* explorer cannot /select a drive root; open the drive itself instead. */
       if (/^[A-Za-z]:\\$/u.test(spelled)) return { command: 'explorer.exe', args: [spelled] }
       return { command: 'explorer.exe', args: [encodeExplorerSelect(spelled)] }
     }
     case 'android':
-      return { command: 'termux-open', args: [directoryOf(target, platform)] }
+      return { command: 'termux-open', args: [isDirectory ? target : directoryOf(target, platform)] }
     default:
-      return { command: 'xdg-open', args: [directoryOf(target, platform)] }
+      return { command: 'xdg-open', args: [isDirectory ? target : directoryOf(target, platform)] }
   }
 }
 
