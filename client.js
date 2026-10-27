@@ -178,6 +178,8 @@ window.__ModuleLoader__.load({
       if (candidate.length > 1 && /^["']/.test(candidate) && /["']$/.test(candidate)) {
         candidate = candidate.slice(1, -1);
       }
+      if (/^["'<]/u.test(candidate)) candidate = candidate.slice(1);
+      if (/>$/u.test(candidate)) candidate = candidate.slice(0, -1);
       candidate = candidate.replace(/[.,;:!?，。；：！？]+$/u, "");
       candidate = stripLineSuffix(candidate);
       if (/^file:\/\//i.test(candidate)) {
@@ -245,7 +247,7 @@ window.__ModuleLoader__.load({
     }
 
     /** An absolute path written as plain text inside the clicked element. */
-    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？]*)/u;
+    var PATH_IN_TEXT = /(?:^|[\s"'“”「」()（）\[\]<>])(@?"?(?:\/|[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|~\/(?!\/))[^\s"'“”「」<>，。；：！？]*)/u;
 
     /** 路径结尾成立的样子：有扩展名，或以分隔符收尾。 */
     var PATH_TAIL = /(?:\.[A-Za-z0-9]{1,8}|[\\/])$/u;
@@ -314,14 +316,14 @@ window.__ModuleLoader__.load({
       var matcher = new RegExp(PATH_IN_TEXT.source, "gu");
       var hit = null;
       while ((hit = matcher.exec(data)) !== null) {
-        bounds.push({ text: hit[0], start: hit.index, end: hit.index + hit[0].length });
+        var captured = hit[1] === undefined ? hit[0] : hit[1];
+        var start = hit.index + hit[0].length - captured.length;
+        var joined = joinPathWords(captured, data.slice(start + captured.length));
+        bounds.push({ text: joined, start: start, end: start + joined.length });
         if (hit[0].length === 0) matcher.lastIndex += 1;
       }
       for (var i = 0; i < bounds.length; i += 1) {
-        if (offset >= bounds[i].start && offset <= bounds[i].end) {
-          var tail = data.slice(bounds[i].end);
-          return normalizeCandidate(joinPathWords(bounds[i].text, tail));
-        }
+        if (offset >= bounds[i].start && offset <= bounds[i].end) return normalizeCandidate(bounds[i].text);
       }
       return null;
     }
