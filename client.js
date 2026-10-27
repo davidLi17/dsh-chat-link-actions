@@ -188,6 +188,7 @@ window.__ModuleLoader__.load({
         if (/^\/[A-Za-z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
       }
       if (/^[A-Za-z]:(?![\\/])/u.test(candidate)) candidate = candidate.slice(0, 2) + "/" + candidate.slice(2);
+      if (!/^(?:[A-Za-z]:[\\/]?|[\\/]{1,2})$/u.test(candidate)) candidate = candidate.replace(/[\\/]+$/u, "");
       return looksAbsolute(candidate) ? candidate : null;
     }
 
