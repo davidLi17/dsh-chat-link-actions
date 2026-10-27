@@ -9,7 +9,9 @@
  */
 
 import { execFile } from 'node:child_process'
-import { lstat, stat } from 'node:fs/promises'
+import { appendFile, lstat, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { dirname, isAbsolute, win32 as pathWin32 } from 'node:path'
 
 /** Services required before mounting: route registration + the web runtime fence. */
@@ -211,6 +213,21 @@ export function optionalMember(ctx, name) {
   }
 }
 
+/**
+ * One line per reveal attempt on disk, so a report of "nothing happened" can be
+ * told apart from "never reached the plugin". Kept out of the UI on purpose.
+ */
+async function trace(line) {
+  try {
+    const file = join(homedir(), '.dsh', 'logs', 'chat-link-actions.log')
+    const info = await stat(file).catch(() => null)
+    if (info !== null && info.size > 131072) return
+    await appendFile(file, `${new Date().toISOString()} ${line}\n`)
+  } catch (ignored) {
+    /* diagnostics must never take the plugin down */
+  }
+}
+
 export function apply(ctx) {
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
@@ -242,7 +259,9 @@ export function apply(ctx) {
     kind: 'prefix',
     path: '/chat-link-actions',
     handler: async (req, res) => {
+      const described = `${req.method ?? '?'} ${String(req.url ?? '/')}`
       if (!fence(req)) {
+        trace(`fence-refused ${described}`)
         warn('chat-link-actions: reveal request rejected by the connection fence')
         return reply(res, 403, { ok: false, error: 'forbidden' })
       }
@@ -261,6 +280,7 @@ export function apply(ctx) {
           isSymbolicLink: link !== null && link.isSymbolicLink(),
         }
         const outcome = await launch(target, facts)
+        trace(`${outcome.ok ? 'opened' : 'launch-failed'} ${target}`)
         if (!outcome.ok) return reply(res, 500, { ok: false, error: 'launch-failed' })
         return reply(res, 200, { ok: true })
       } catch (error) {

@@ -466,6 +466,19 @@ window.__ModuleLoader__.load({
      * an absolute `data-*` value, then a title, then the element's own text. The
      * text pass covers paths the transcript renders as plain prose.
      */
+    /** `srcset` 里第一条绝对路径（图片芯片常用多倍图）。 */
+    function srcsetPath(node) {
+      var value = node.getAttribute("srcset");
+      if (value === null || value === undefined || value.indexOf("/") === -1) return null;
+      var pieces = String(value).split(",");
+      for (var i = 0; i < pieces.length; i += 1) {
+        var first = pieces[i].replace(/\s+\d+(?:\.\d+)?[wx]\s*$/u, "").trim();
+        var decoded = decodePathFromHref(first);
+        if (decoded !== null) return decoded;
+      }
+      return null;
+    }
+
     function pathFromNode(start, point) {
       for (var node = start; node !== null && node !== undefined && node !== document.body; node = node.parentElement) {
         if (node.nodeType !== 1) continue;
@@ -473,6 +486,8 @@ window.__ModuleLoader__.load({
           var fromHref = decodePathFromHref(node.getAttribute(PATH_ATTRS[a]));
           if (fromHref !== null) return fromHref;
         }
+        var fromSrcset = srcsetPath(node);
+        if (fromSrcset !== null) return fromSrcset;
         var fromData = datasetPath(node);
         if (fromData !== null) return fromData;
         var fromTitle = normalizeCandidate(node.getAttribute("title"));
@@ -948,51 +963,84 @@ window.__ModuleLoader__.load({
       return trimmed;
     }
 
+    /**
+     * One click, one attempt: the native call can hang on a stalled link and the
+     * fallback can stall too, so a watchdog guarantees the click always answers.
+     */
+    var revealAttempt = null;
+
     function reveal(path) {
+      var attempt = { done: false };
+      revealAttempt = attempt;
       probePath(path, function (kind) {
+        if (attempt.done || revealAttempt !== attempt) return;
         if (kind === "missing") {
+          attempt.done = true;
           toast(strings().missing);
           return;
         }
-        revealNative(path, true);
+        revealNative(path, true, attempt);
       });
+      setTimeout(function () {
+        if (attempt.done) return;
+        attempt.done = true;
+        toast(strings().managerFailed);
+      }, 4500);
     }
 
     /** 首选：应用的原生打开能力，macOS 访达、Windows 资源管理器同一套。 */
-    function revealNative(path, allowTrim) {
+    function revealNative(path, allowTrim, attempt) {
+      if (attempt !== undefined && attempt.done) return;
       var remote = sessionRemote();
       var session = remote === null ? null : remote.session;
       if (session === null || session === undefined || typeof session.openWorkspacePath !== "function") {
-        revealViaRoute(path);
+        revealViaRoute(path, attempt);
         return;
       }
       var pending;
       try {
         pending = session.openWorkspacePath({ path: path, action: "reveal" });
       } catch (error) {
-        afterReveal(path, allowTrim, null, error);
+        afterReveal(path, allowTrim, null, error, attempt);
         return;
       }
       if (pending === null || pending === undefined || typeof pending.then !== "function") {
-        afterReveal(path, allowTrim, pending, null);
+        afterReveal(path, allowTrim, pending, null, attempt);
         return;
       }
+      /* 原生调用不该成为终点：等不到回执就走退路。 */
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        afterReveal(path, allowTrim, null, new Error("timeout"), attempt);
+      }, 2500);
+      var stop = function (result, error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        afterReveal(path, allowTrim, result, error, attempt);
+      };
       pending.then(function (result) {
-        afterReveal(path, allowTrim, result, null);
+        stop(result, null);
       }, function (error) {
-        afterReveal(path, allowTrim, null, error);
+        stop(null, error);
       });
     }
 
     /** 成功即结束；失败先去掉末尾分隔符重试一次，再退到 HTTP 路由。 */
-    function afterReveal(path, allowTrim, result, error) {
-      if (isOpened(result)) return;
-      var trimmed = withoutTrailingSeparator(path);
-      if (allowTrim === true && trimmed !== path) {
-        revealNative(trimmed, false);
+    function afterReveal(path, allowTrim, result, error, attempt) {
+      if (attempt !== undefined && attempt.done) return;
+      if (isOpened(result)) {
+        if (attempt !== undefined) attempt.done = true;
         return;
       }
-      revealViaRoute(trimmed);
+      var trimmed = withoutTrailingSeparator(path);
+      if (allowTrim === true && trimmed !== path) {
+        revealNative(trimmed, false, attempt);
+        return;
+      }
+      revealViaRoute(trimmed, attempt);
     }
 
     /** 应用打开成功的回执：`{ opened: true }`，旧版本曾用 `{ ok: true }`。 */
@@ -1001,16 +1049,21 @@ window.__ModuleLoader__.load({
     }
 
     /** 退路：插件自己的 HTTP 路由（页面同源时可用）。 */
-    function revealViaRoute(path) {
+    function revealViaRoute(path, attempt) {
+      if (attempt !== undefined && attempt.done) return;
+      var finish = function (message) {
+        if (attempt !== undefined && attempt.done) return;
+        if (attempt !== undefined) attempt.done = true;
+        if (message !== undefined) toast(message);
+      };
       fetch("/chat-link-actions?action=reveal&path=" + encodeURIComponent(path), { method: "POST" }).then(function (response) {
-        if (response.ok) return;
-        if (response.status === 404) {
-          toast(strings().missing);
+        if (response.ok) {
+          finish();
           return;
         }
-        toast(strings().managerFailed);
+        finish(response.status === 404 ? strings().missing : strings().managerFailed);
       }, function () {
-        toast(strings().managerFailed);
+        finish(strings().managerFailed);
       });
     }
 
