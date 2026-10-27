@@ -577,10 +577,27 @@ window.__ModuleLoader__.load({
 
     function onKeyDown(event) {
       if (open === null) return;
+      var typing = editableField(event.target) === true || (open.restoreFocus !== null && editableField(open.restoreFocus) === true);
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         closeMenu(true);
+        return;
+      }
+      if (typing && event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+        /* 用户已经在打字，就当放弃了菜单，别抢键。 */
+        closeMenu(false);
+        return;
+      }
+      if (event.key === "Tab") {
+        closeMenu(false);
+        return;
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        event.stopPropagation();
+        open.index = event.key === "Home" ? 0 : open.items.length - 1;
+        paintActive();
         return;
       }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -624,6 +641,8 @@ window.__ModuleLoader__.load({
       for (var i = 0; i < open.buttons.length; i += 1) {
         open.buttons[i].setAttribute("data-active", i === open.index ? "true" : "false");
       }
+      var active = open.buttons[open.index];
+      if (active !== undefined) open.panel.setAttribute("aria-activedescendant", active.id);
     }
 
     function buildMenu(path, items) {
@@ -631,6 +650,7 @@ window.__ModuleLoader__.load({
       panel.className = "dcla-menu";
       panel.setAttribute("role", "menu");
       panel.setAttribute("aria-label", strings().menu);
+      panel.setAttribute("aria-activedescendant", "dcla-item-0");
 
       var caption = document.createElement("div");
       caption.className = "dcla-path";
@@ -647,7 +667,9 @@ window.__ModuleLoader__.load({
         var button = document.createElement("button");
         button.type = "button";
         button.className = "dcla-item";
+        button.id = "dcla-item-" + position;
         button.setAttribute("role", "menuitem");
+        button.setAttribute("tabindex", "-1");
         button.setAttribute("data-active", position === 0 ? "true" : "false");
 
         var glyph = document.createElement("span");
