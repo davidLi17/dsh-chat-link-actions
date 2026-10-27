@@ -996,8 +996,8 @@ window.__ModuleLoader__.load({
         probePath(path, function (kind) {
         if (attempt.done || revealAttempt !== attempt) return;
         if (kind === "missing") {
-          attempt.done = true;
-          toast(strings().missing);
+          /* 探测只看得到已打开会话的工作区：路径可能在 /tmp 或别处，交给宿主判定。 */
+          revealViaRoute(withoutTrailingSeparator(path), attempt);
           return;
         }
         revealNative(path, true, attempt);
