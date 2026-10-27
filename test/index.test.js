@@ -130,6 +130,34 @@ test('Linux：没有选中协议，打开所在目录', () => {
   assert.deepEqual(flat(openDirectoryCommand('/a/b/', 'linux')), ['xdg-open', '/a'])
 })
 
+test('Windows 边界：尾分隔符、UNC 目录、盘符根、长路径前缀都按 Windows 规则走', () => {
+  assert.deepEqual(flat(revealCommand('C:\\a\\b.md\\', 'win32')), ['explorer.exe', '/select,C:\\a\\b.md'])
+  assert.deepEqual(flat(revealCommand('C:\\a\\b\\', 'win32', { isDirectory: true })), ['explorer.exe', 'C:\\a\\b'])
+  assert.deepEqual(flat(openDirectoryCommand('C:\\a\\b.md', 'win32')), ['explorer.exe', 'C:\\a'])
+  assert.deepEqual(flat(openDirectoryCommand('C:\\', 'win32')), ['explorer.exe', 'C:\\'])
+  assert.deepEqual(flat(revealCommand('\\\\srv\\share\\dir\\', 'win32', { isDirectory: true })), [
+    'explorer.exe',
+    '\\\\srv\\share\\dir',
+  ])
+  assert.deepEqual(flat(revealCommand('\\\\?\\C:\\long\\x.md', 'win32')), [
+    'explorer.exe',
+    '/select,\\\\?\\C:\\long\\x.md',
+  ])
+  assert.equal(requireAbsolute('C:\\a\\b.md', 'win32'), 'C:\\a\\b.md')
+  assert.throws(() => requireAbsolute('C:rel\\x.md', 'win32'), /absolute path required/)
+  assert.equal(requireAbsolute('\\\\srv\\share', 'win32'), '\\\\srv\\share')
+  assert.throws(() => requireAbsolute('..\\up.md', 'win32'), /absolute path required/)
+})
+
+test('macOS 边界：带空格、中文、括号、井号的路径原样进 argv', () => {
+  const weird = '/Users/apple/My Dir/中文 (1) #tag.md'
+  assert.deepEqual(flat(revealCommand(weird, 'darwin')), ['open', '-R', weird])
+  assert.deepEqual(flat(revealCommand('/Users/apple/My Dir/', 'darwin', { isDirectory: true })), [
+    'open',
+    '/Users/apple/My Dir',
+  ])
+})
+
 test('路径校验：只收本机绝对路径，拒绝相对路径与 NUL', () => {
   assert.equal(requireAbsolute('/a/b.md', 'darwin'), '/a/b.md')
   assert.equal(requireAbsolute('C:\\a\\b.md', 'win32'), 'C:\\a\\b.md')
