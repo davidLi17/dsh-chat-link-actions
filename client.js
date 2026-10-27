@@ -235,7 +235,8 @@ window.__ModuleLoader__.load({
           if (fromNamed !== null) return fromNamed;
         }
         if (url.protocol === "file:") return normalizeCandidate(decodeURIComponent(url.pathname));
-        if (url.origin === location.origin && looksAbsolute(url.pathname) && /\.[A-Za-z0-9]{1,6}$/.test(url.pathname)) {
+        /* 尾斜杠说明指向目录，没有扩展名也接受。 */
+        if (url.origin === location.origin && looksAbsolute(url.pathname) && (/\.[A-Za-z0-9]{1,6}$/.test(url.pathname) || /\/$/.test(url.pathname))) {
           return normalizeCandidate(decodeURIComponent(url.pathname));
         }
       } catch (error) {
