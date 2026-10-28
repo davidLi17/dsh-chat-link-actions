@@ -1,6 +1,6 @@
 # dsh-chat-link-actions
 
-**对话里的附件和路径，右键就是你自己的入口。** 发给微信好友、用谷歌浏览器打开，或者你想到的任何处理——一个右键，把窗口里的文件直接交给那件事。
+**对话里的附件和路径，右键就是你自己的入口。** 发给微信好友、用谷歌浏览器打开，或者你想到的任何处理——一个右键，做你想做的任何事。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/regrevia/dsh-chat-link-actions/main/assets/context-menu.png" width="360" alt="对话里右键文件路径，弹出菜单：引用到对话、在文件管理器中查看、复制路径、发送到…、用 WPS 打开、自定义入口…">
