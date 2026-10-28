@@ -184,11 +184,14 @@ window.__ModuleLoader__.load({
 
     /** Trim a candidate down to the bare file path a link carries. */
     /** Drop sentence punctuation that followed the path in prose. */
+    var PROSE_CLOSERS = { ")": "(", "]": "[", "\uff09": "\uff08", "\u300d": "\u300c", "\u3011": "\u3010", "\u300b": "\u300a", "\u3015": "\u3014", "\u3009": "\u3008" };
+
     function trimProsePunctuation(value) {
       var text = value.replace(/[.,;:!?]+$/u, "");
-      while (text.length > 1 && (text.charAt(text.length - 1) === ")" || text.charAt(text.length - 1) === "]")) {
-        var open = text.charAt(text.length - 1) === ")" ? "(" : "[";
+      while (text.length > 1) {
         var close = text.charAt(text.length - 1);
+        var open = PROSE_CLOSERS[close];
+        if (open === undefined) break;
         var opens = text.split(open).length - 1;
         var closes = text.split(close).length - 1;
         if (closes <= opens) break;
@@ -229,7 +232,7 @@ window.__ModuleLoader__.load({
       if (candidate.length > 1 && /^["']/.test(candidate) && /["']$/.test(candidate)) {
         candidate = candidate.slice(1, -1);
       }
-      if (/^["'<]/u.test(candidate)) candidate = candidate.slice(1);
+      if (/^["'<\uff08\u300c\u3010\u300a\u3014\u3008]/u.test(candidate)) candidate = candidate.slice(1);
       if (/>$/u.test(candidate)) candidate = candidate.slice(0, -1);
       if (/^file:\/\//i.test(candidate)) {
         var fromUri = decodeFileUri(candidate);
@@ -243,7 +246,7 @@ window.__ModuleLoader__.load({
 
     /** 正文里取出的路径：句读属于句子，不属于文件名。 */
     function proseCandidatePath(value) {
-      return trimProsePunctuation(value.replace(/[.,;:!?，。；：！？]+$/u, ""));
+      return trimProsePunctuation(value.replace(/[.,;:!?，。；：！？、]+$/u, ""));
     }
 
     function looksAbsolute(value) {
@@ -312,14 +315,55 @@ window.__ModuleLoader__.load({
      */
     var PATH_ATTRS = ["href", "src"];
 
+    /** JSON 里只认名字明确说「磁盘位置」的字段；`src`/`href` 多是页面地址。 */
+    var JSON_PATH_KEYS = ["path", "absolutePath", "filePath", "localPath", "assetPath", "sourcePath"];
+
+    /** 对象里带路径的字段（含容器与数组）：给 JSON 形状的 data-* 用。 */
+    function pathFromPlainObject(box, depth) {
+      if (box === null || typeof box !== "object" || depth > 2) return null;
+      for (var k = 0; k < JSON_PATH_KEYS.length; k += 1) {
+        var direct = normalizeCandidate(box[JSON_PATH_KEYS[k]]);
+        if (direct !== null) return direct;
+      }
+      if (Array.isArray(box)) {
+        for (var i = 0; i < box.length && i < 8; i += 1) {
+          var fromItem = pathFromPlainObject(box[i], depth + 1);
+          if (fromItem !== null) return fromItem;
+        }
+        return null;
+      }
+      for (var c = 0; c < PROP_CONTAINERS.length; c += 1) {
+        var inner = pathFromPlainObject(box[PROP_CONTAINERS[c]], depth + 1);
+        if (inner !== null) return inner;
+      }
+      return null;
+    }
+
+    /** `data-file='{"path":"/x"}'`：宿主把附件对象序列化进属性时也能认。 */
+    function pathFromJsonAttr(value) {
+      if (typeof value !== "string") return null;
+      var text = value.trim();
+      if (text === "" || text.length > 4000) return null;
+      if (text.charAt(0) !== "{" && text.charAt(0) !== "[") return null;
+      var box = null;
+      try {
+        box = JSON.parse(text);
+      } catch (error) {
+        return null;
+      }
+      return pathFromPlainObject(box, 0);
+    }
+
     /** `data-*` values that may carry a path, in confidence order. */
     function datasetPath(node) {
       var dataset = node.dataset || {};
       var keys = Object.keys(dataset);
       for (var i = 0; i < keys.length; i += 1) {
-        if (!/path|file|href|src|dir|folder|abs/i.test(keys[i])) continue;
+        if (!/path|file|href|src|dir|folder|abs|attachment|asset/i.test(keys[i])) continue;
         var candidate = normalizeCandidate(dataset[keys[i]]);
         if (candidate !== null) return candidate;
+        var fromJson = pathFromJsonAttr(dataset[keys[i]]);
+        if (fromJson !== null) return fromJson;
       }
       return null;
     }
@@ -605,6 +649,8 @@ window.__ModuleLoader__.load({
         }
         var title = normalizeCandidate(el.getAttribute("title"));
         if (title !== null && looksAbsolute(title)) return title;
+        var alt = normalizeCandidate(el.getAttribute("alt"));
+        if (alt !== null && looksAbsolute(alt)) return alt;
       }
       return null;
     }
@@ -645,6 +691,12 @@ window.__ModuleLoader__.load({
         if (fromData !== null) return fromData;
         var fromTitle = normalizeCandidate(node.getAttribute("title"));
         if (fromTitle !== null) return fromTitle;
+        var fromLabel = normalizeCandidate(node.getAttribute("aria-label"));
+        if (fromLabel !== null) return fromLabel;
+        if (node.tagName === "IMG") {
+          var fromAlt = normalizeCandidate(node.getAttribute("alt"));
+          if (fromAlt !== null) return fromAlt;
+        }
       }
       var fromFiber = pathFromFiber(start);
       if (fromFiber !== null) return fromFiber;
@@ -1583,7 +1635,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.4");
+      report("ready 0.6.5");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

@@ -217,6 +217,31 @@ test('网址目标：站内补全、协议相对补全', () => {
   assert.equal(paths.linkTarget(chain('a', { href: 'mailto:a@b.c' })), null)
 })
 
+/* ── 更多附件/芯片形态 ────────────────────────────────────────────────── */
+
+test('JSON 形状的 data-*：附件对象序列化进属性也认', () => {
+  assert.equal(found(chain('div', { 'data-file': '{"path":"/Users/example/报告.pdf"}' })), '/Users/example/报告.pdf')
+  assert.equal(found(chain('div', { 'data-attachment': '{"file":{"absolutePath":"C:\\\\work\\\\a.md"}}' })), 'C:\\work\\a.md')
+  assert.equal(found(chain('img', { src: '/attachments/x.png', 'data-asset': '[{"src":"/attachments/y.png"},{"path":"/tmp/z.png"}]' })), '/tmp/z.png')
+  assert.equal(found(chain('div', { 'data-file': '{"id":"abc"}' })), null)
+  assert.equal(found(chain('div', { 'data-file': '{坏掉的 JSON' })), null)
+})
+
+test('aria-label 与图片 alt 上的路径也认', () => {
+  assert.equal(found(chain('span', { 'aria-label': '/Users/example/a.md' })), '/Users/example/a.md')
+  assert.equal(found(chain('img', { src: '/attachments/p.png', alt: '/Users/example/原图.png' })), '/Users/example/原图.png')
+  assert.equal(paths.imageFilePath(chain('img', { src: '/attachments/p.png', alt: '/Users/example/原图.png' })), '/Users/example/原图.png')
+  assert.equal(found(chain('span', { 'aria-label': '附件 a.md' })), null)
+})
+
+test('正文标点：顿号与全角收尾括号不进路径', () => {
+  assert.equal(paths.normalizeCandidate('/Users/example/a.md、'), '/Users/example/a.md')
+  assert.equal(paths.normalizeCandidate('（/Users/example/a.md）'), '/Users/example/a.md')
+  assert.equal(paths.normalizeCandidate('「/Users/example/a.md」'), '/Users/example/a.md')
+  /* 路径自己带的括号不能被当成句子括号 */
+  assert.equal(paths.normalizeCandidate('/Users/example/草稿(1).md）'), '/Users/example/草稿(1).md')
+})
+
 /* ── 稳定性：脏属性、深链、随机输入都不能抛错 ─────────────────────────── */
 
 test('属性值不是字符串时目录判断也不抛错', () => {
