@@ -160,11 +160,11 @@ test('Windows 边界：尾分隔符、UNC 目录、盘符根、长路径前缀�
 })
 
 test('macOS 边界：带空格、中文、括号、井号的路径原样进 argv', () => {
-  const weird = '/Users/apple/My Dir/中文 (1) #tag.md'
+  const weird = '/Users/example/My Dir/中文 (1) #tag.md'
   assert.deepEqual(flat(revealCommand(weird, 'darwin')), ['open', '-R', weird])
-  assert.deepEqual(flat(revealCommand('/Users/apple/My Dir/', 'darwin', { isDirectory: true })), [
+  assert.deepEqual(flat(revealCommand('/Users/example/My Dir/', 'darwin', { isDirectory: true })), [
     'open',
-    '/Users/apple/My Dir',
+    '/Users/example/My Dir',
   ])
 })
 
@@ -321,12 +321,12 @@ test('Windows：verbatim 盘根保留分隔符，explorer 只加一层引号', (
 
 
 test('自定义入口：模板替换按平台引用路径', () => {
-  const target = { path: '/Users/apple/My Dir/a b.md', url: 'https://x.test/p' }
+  const target = { path: '/Users/example/My Dir/a b.md', url: 'https://x.test/p' }
   assert.equal(
     customCommand('open -a WeChat {path}', target, 'darwin'),
-    "open -a WeChat '/Users/apple/My Dir/a b.md'"
+    "open -a WeChat '/Users/example/My Dir/a b.md'"
   )
-  assert.equal(customCommand('explorer {dir}', target, 'win32'), 'explorer "/Users/apple/My Dir"')
+  assert.equal(customCommand('explorer {dir}', target, 'win32'), 'explorer "/Users/example/My Dir"')
   assert.equal(customCommand('{name}', target, 'darwin'), "'a b.md'")
   assert.equal(customCommand('open {url}', target, 'darwin'), "open 'https://x.test/p'")
   assert.equal(quoteArgument("it's", 'darwin'), "'it'\\''s'")

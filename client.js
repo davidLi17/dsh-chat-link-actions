@@ -1583,7 +1583,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.3");
+      report("ready 0.6.4");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

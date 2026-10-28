@@ -35,8 +35,8 @@ const paths = await loadPaths()
 
 test('file URI：盘符保留，UNC 主机不丢', () => {
   assert.equal(paths.decodePathFromHref('file:///C:/work/a.txt'), 'C:/work/a.txt')
-  assert.equal(paths.decodePathFromHref('file:///Users/apple/a%20b.md'), '/Users/apple/a b.md')
-  assert.equal(paths.decodePathFromHref('file://localhost/Users/apple/x'), '/Users/apple/x')
+  assert.equal(paths.decodePathFromHref('file:///Users/example/a%20b.md'), '/Users/example/a b.md')
+  assert.equal(paths.decodePathFromHref('file://localhost/Users/example/x'), '/Users/example/x')
   assert.equal(paths.decodePathFromHref('file://server/share/a.md'), '\\\\server\\share\\a.md')
   /* 查询参数里的路径优先于 pathname。 */
   assert.equal(paths.decodePathFromHref('/open?path=%2Ftmp%2Fa%20b.md'), '/tmp/a b.md')

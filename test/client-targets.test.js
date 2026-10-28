@@ -93,7 +93,7 @@ function found(node) {
 
 test('图片：file URI 与 data-* 上的磁盘位置都能取到', () => {
   assert.equal(found(chain('img', { src: 'file:///C:/work/a%20b.png' })), 'C:/work/a b.png')
-  assert.equal(found(chain('img', { src: '/attachments/abc.png', 'data-path': '/Users/apple/照片 1.png' })), '/Users/apple/照片 1.png')
+  assert.equal(found(chain('img', { src: '/attachments/abc.png', 'data-path': '/Users/example/照片 1.png' })), '/Users/example/照片 1.png')
   assert.equal(found(nest(fakeNode('span'), chain('img', { src: 'file:///tmp/x.jpg' }))), '/tmp/x.jpg')
 })
 
@@ -104,24 +104,24 @@ test('图片：页面地址不当成本机文件', () => {
 })
 
 test('视频与音频：src、source 子元素、srcset 都能认', () => {
-  assert.equal(found(chain('video', { src: 'file:///Users/apple/clip.mp4' })), '/Users/apple/clip.mp4')
-  assert.equal(found(chain('source', { src: 'file:///Users/apple/a.webm' })), '/Users/apple/a.webm')
-  assert.equal(found(chain('img', { srcset: '/attachments/s.png 1x, file:///Users/apple/大图@2x.png 2x' })), '/Users/apple/大图@2x.png')
+  assert.equal(found(chain('video', { src: 'file:///Users/example/clip.mp4' })), '/Users/example/clip.mp4')
+  assert.equal(found(chain('source', { src: 'file:///Users/example/a.webm' })), '/Users/example/a.webm')
+  assert.equal(found(chain('img', { srcset: '/attachments/s.png 1x, file:///Users/example/大图@2x.png 2x' })), '/Users/example/大图@2x.png')
 })
 
 /* ── 链接与芯片 ────────────────────────────────────────────────────────── */
 
 test('链接：问号路径、显式 file 参数、尾斜杠目录', () => {
   assert.equal(found(chain('a', { href: '?path=%2Ftmp%2Fa%20b.md' })), '/tmp/a b.md')
-  assert.equal(found(chain('a', { href: '/open?file=%2FUsers%2Fapple%2Fa.md' })), '/Users/apple/a.md')
-  assert.equal(found(chain('a', { href: '/Users/apple/Documents/' })), '/Users/apple/Documents')
-  assert.equal(found(chain('a', { href: `/Users/apple/${'深目录/'.repeat(3)}说明.md` })), `/Users/apple/${'深目录/'.repeat(3)}说明.md`)
+  assert.equal(found(chain('a', { href: '/open?file=%2FUsers%2Fexample%2Fa.md' })), '/Users/example/a.md')
+  assert.equal(found(chain('a', { href: '/Users/example/Documents/' })), '/Users/example/Documents')
+  assert.equal(found(chain('a', { href: `/Users/example/${'深目录/'.repeat(3)}说明.md` })), `/Users/example/${'深目录/'.repeat(3)}说明.md`)
 })
 
 test('链接：行号后缀不进路径', () => {
-  assert.equal(found(chain('a', { href: '/Users/apple/repo/file.cjs#L12' })), '/Users/apple/repo/file.cjs')
-  assert.equal(found(chain('a', { href: '/Users/apple/repo/file.cjs#L12-L20' })), '/Users/apple/repo/file.cjs')
-  assert.equal(found(chain('a', { href: '/Users/apple/repo/file.cjs:12:3' })), '/Users/apple/repo/file.cjs')
+  assert.equal(found(chain('a', { href: '/Users/example/repo/file.cjs#L12' })), '/Users/example/repo/file.cjs')
+  assert.equal(found(chain('a', { href: '/Users/example/repo/file.cjs#L12-L20' })), '/Users/example/repo/file.cjs')
+  assert.equal(found(chain('a', { href: '/Users/example/repo/file.cjs:12:3' })), '/Users/example/repo/file.cjs')
 })
 
 test('附件卡片：点在预览图上，路径仍来自外层的链接', () => {
@@ -137,12 +137,12 @@ test('停在 body 处：不把整页当成一个链接', () => {
 })
 
 test('芯片：路径只在 title 上，或只在组件 props 里', () => {
-  assert.equal(found(chain('span', { title: '/Users/apple/a.md' })), '/Users/apple/a.md')
+  assert.equal(found(chain('span', { title: '/Users/example/a.md' })), '/Users/example/a.md')
   const fiber = { memoizedProps: { file: { path: 'C:\\work\\报告.pdf' } }, return: null }
   const chip = chain('span', {}, { __reactFiber$1: fiber })
   assert.equal(found(chip), 'C:\\work\\报告.pdf')
-  const deepFiber = { memoizedProps: {}, return: { memoizedProps: { path: '/Users/apple/b.md' }, return: null } }
-  assert.equal(found(chain('span', {}, { __reactFiber$2: deepFiber })), '/Users/apple/b.md')
+  const deepFiber = { memoizedProps: {}, return: { memoizedProps: { path: '/Users/example/b.md' }, return: null } }
+  assert.equal(found(chain('span', {}, { __reactFiber$2: deepFiber })), '/Users/example/b.md')
 })
 
 test('Windows：盘符、UNC、带空格与中文', () => {
@@ -196,9 +196,9 @@ test('属性不是字符串时不抛错', () => {
 })
 
 test('目录判断：形状与数据属性两种来源', () => {
-  assert.equal(paths.guessDirectory('/Users/apple/Documents'), true)
-  assert.equal(paths.guessDirectory('/Users/apple/a.md'), false)
-  assert.equal(paths.guessDirectory('/Users/apple/.config'), true)
+  assert.equal(paths.guessDirectory('/Users/example/Documents'), true)
+  assert.equal(paths.guessDirectory('/Users/example/a.md'), false)
+  assert.equal(paths.guessDirectory('/Users/example/.config'), true)
   assert.equal(paths.directoryHint(chain('div', { 'data-appearance': 'folder' })), true)
   assert.equal(paths.directoryHint(chain('div', { 'data-type': 'file' })), false)
   const fiber = { memoizedProps: { reference: { appearance: 'directory' } }, return: null }
@@ -206,8 +206,8 @@ test('目录判断：形状与数据属性两种来源', () => {
 })
 
 test('引用文字：带空格用 @""，不带空格用 @', () => {
-  assert.equal(paths.referenceText('/Users/apple/a.md'), '@/Users/apple/a.md')
-  assert.equal(paths.referenceText('/Users/apple/a b.md'), '@"/Users/apple/a b.md"')
+  assert.equal(paths.referenceText('/Users/example/a.md'), '@/Users/example/a.md')
+  assert.equal(paths.referenceText('/Users/example/a b.md'), '@"/Users/example/a b.md"')
 })
 
 test('网址目标：站内补全、协议相对补全', () => {
@@ -225,9 +225,9 @@ test('属性值不是字符串时目录判断也不抛错', () => {
 })
 
 test('深链正常结束：500 层祖先不会卡住', () => {
-  let node = fakeNode('span', { title: '/Users/apple/深处.md' })
+  let node = fakeNode('span', { title: '/Users/example/深处.md' })
   for (let i = 0; i < 500; i += 1) node = nest(node, fakeNode('div'))
-  assert.equal(found(node), '/Users/apple/深处.md')
+  assert.equal(found(node), '/Users/example/深处.md')
 })
 
 test('随机脏属性：不抛错，认出来的也一定是绝对路径', () => {
