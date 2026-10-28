@@ -514,15 +514,25 @@ window.__ModuleLoader__.load({
     }
 
     /** 右键落在图片上：图片自己就是被操作的对象。 */
+    /** 站内相对地址补成绝对地址，复制出去才能直接打开。 */
+    function absoluteUrl(value) {
+      var text = String(value === null || value === undefined ? "" : value).trim();
+      if (text === "") return null;
+      if (/^https?:/i.test(text)) return text;
+      if (/^\/\//u.test(text)) return String(location.protocol) + text;
+      if (text.charAt(0) === "/") return String(location.origin) + text;
+      return null;
+    }
+
     /** 右键落在链接上时，链接本身也是可操作对象。 */
     function linkTarget(node) {
       for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
         if (el.nodeType !== 1) continue;
-        var href = el.getAttribute("href");
-        if (href !== null && /^https?:/i.test(href)) return String(href);
-        if (el.tagName === "IMG") {
-          var source = el.getAttribute("src");
-          if (source !== null && /^https?:/i.test(source)) return String(source);
+        var href = absoluteUrl(el.getAttribute("href"));
+        if (href !== null) return href;
+        if (el.tagName === "IMG" || el.tagName === "VIDEO" || el.tagName === "AUDIO" || el.tagName === "SOURCE") {
+          var source = absoluteUrl(el.currentSrc || el.getAttribute("src"));
+          if (source !== null) return source;
         }
       }
       return null;
@@ -1408,7 +1418,7 @@ window.__ModuleLoader__.load({
         var inField = editableField(target);
         var image = imageTarget(target);
         var imageUrl = image === null ? null : imageSource(image);
-        var url = linkTarget(target);
+        var url = imageUrl === null ? linkTarget(target) : null;
         proseCandidate = false;
         var path = image === null ? pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField }) : imageFilePath(image);
         report("ctx " + probeTag + " path=" + (path === null ? "null" : String(path).slice(0, 140)) + " img=" + (imageUrl === null ? "null" : String(imageUrl).slice(0, 100)) + " url=" + (url === null ? "null" : String(url).slice(0, 100)));
@@ -1435,7 +1445,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.3.4");
+      report("ready 0.3.5");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

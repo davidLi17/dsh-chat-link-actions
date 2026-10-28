@@ -361,7 +361,7 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('host 0.3.4 ready')
+  trace('mounted 0.3.5')
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
     try {

@@ -132,3 +132,10 @@ test('图片上右键会接管原生菜单', () => {
   assert.equal(captions.length, 0, "图片菜单不该再顶一行类型说明")
   assert.equal(items.length, 1, "图片菜单只有复制图片")
 })
+
+test('站内相对链接补成可复制的绝对地址', () => {
+  assert.equal(paths.linkTarget(new ElementStub('A', { href: '/attachments/v1/a.pdf' })), 'http://127.0.0.1:50937/attachments/v1/a.pdf')
+  assert.equal(paths.linkTarget(new ElementStub('A', { href: 'https://x.test/p' })), 'https://x.test/p')
+  assert.equal(paths.linkTarget(new ElementStub('A', { href: 'mailto:a@b.c' })), null)
+  assert.equal(paths.linkTarget(new ElementStub('VIDEO', { src: '/media/v.mp4' })), 'http://127.0.0.1:50937/media/v.mp4')
+})
