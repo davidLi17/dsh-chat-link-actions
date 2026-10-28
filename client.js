@@ -1188,7 +1188,11 @@ window.__ModuleLoader__.load({
           });
         } });
       }
-      items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
+      try {
+        items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
+      } catch (ignored) {
+        /* 自定义条目读不出来时，基础菜单照常给 */
+      }
       if (hasPath || url !== null) {
         items.push({ id: "customize", label: strings().customize, icon: "custom", run: function () {
           openActionsEditor();
@@ -1477,6 +1481,22 @@ window.__ModuleLoader__.load({
       return activeSession;
     }
 
+    /** 兜底：只解析路径和链接，附加信息一律跳过。 */
+    function optionsForBareMenu(event) {
+      var target = event.target;
+      var image = null;
+      var path = null;
+      var url = null;
+      try { image = imageTarget(target); } catch (ignored) { image = null; }
+      try { url = image === null ? linkTarget(target) : null; } catch (ignored) { url = null; }
+      try {
+        path = image === null ? pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: true }) : imageFilePath(image);
+      } catch (ignored) { path = null; }
+      if (path !== null && !looksLikePath(path)) path = null;
+      var options = { inField: false, image: null, url: url };
+      return { path: path, url: url, options: options };
+    }
+
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
@@ -1493,16 +1513,29 @@ window.__ModuleLoader__.load({
         if (path !== null && proseCandidate && !looksLikePath(path)) return;
         var options = {};
         options.inField = inField;
-        options.directory = directoryHint(target);
-        options.sessionId = sessionOfNode(target);
+        try { options.directory = directoryHint(target); } catch (ignored) { options.directory = undefined; }
+        try { options.sessionId = sessionOfNode(target); } catch (ignored) { options.sessionId = activeSession; }
         options.image = imageUrl;
         options.url = url;
         openMenu(path, event.clientX, event.clientY, options);
         event.preventDefault();
         event.stopPropagation();
       } catch (error) {
-        report("ctx-threw " + (error && error.message ? error.message : String(error)));
+        var why = error && error.message ? error.message : String(error);
+        report("ctx-threw " + why + " | " + String(error && error.stack ? error.stack : "").replace(/\s+/gu, " ").slice(0, 400));
         closeMenu(false);
+        /* 附加能力坏了也要给基础菜单：引用、定位、复制永远在。 */
+        try {
+          var bare = optionsForBareMenu(event);
+          if (bare.path !== null || bare.url !== null) {
+            openMenu(bare.path, event.clientX, event.clientY, bare.options);
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+        } catch (ignored) {
+          /* fall through to the failure toast */
+        }
         noteFailure(error);
       }
     }
@@ -1512,7 +1545,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.5.4");
+      report("ready 0.5.5");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
