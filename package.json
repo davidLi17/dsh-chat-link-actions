@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-link-actions",
-  "version": "0.3.6",
+  "version": "0.5.4",
   "description": "Right-click actions on file links in the DSH transcript: quote the path into the composer, or reveal the file in the OS file manager. Menus are drawn in the app's own style, never the system one.",
   "type": "module",
   "main": "index.js",
@@ -12,12 +12,15 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "index.js",
+    "LICENSE",
+    "PROTOCOL.md",
+    "README.md",
+    "cli.js",
     "client.js",
     "cordis.patch.yml",
-    "README.md",
-    "LICENSE",
-    "icon.png"
+    "icon.png",
+    "index.js",
+    "protocol.json"
   ],
   "keywords": [
     "deepseek-harness",
@@ -59,5 +62,8 @@
   "scripts": {
     "test": "node --test test/index.test.js",
     "check": "node --check index.js && node --check client.js"
+  },
+  "bin": {
+    "dsh-chat-link-actions": "./cli.js"
   }
 }

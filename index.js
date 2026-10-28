@@ -9,7 +9,8 @@
  */
 
 import { execFile, spawn } from 'node:child_process'
-import { appendFile, lstat, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { appendFile, lstat, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dirname, isAbsolute, win32 as pathWin32 } from 'node:path'
@@ -270,22 +271,39 @@ export function quoteArgument(value, platform = process.platform) {
   return `'${text.replace(/'/gu, `'\\''`)}'`
 }
 
-/** One user entry names the command it runs; never more than these limits. */
-const CUSTOM_LIMITS = { entries: 20, label: 40, command: 400 }
+/** One user entry names what it runs; never more than these limits. */
+const CUSTOM_LIMITS = { entries: 20, label: 40, value: 400 }
 
-/** Reject anything that is not a small list of `{ label, command }` pairs. */
+/**
+ * What an entry can be. `shell` runs a command; `app` hands the file to a
+ * named application; `shortcut` runs a Shortcuts workflow with the file as
+ * input (its own 「共享」 action opens the real share sheet); `url` fills a
+ * scheme with the file; `share` opens the system share sheet directly, where
+ * every installed share extension appears（微信、小米互联服务、隔空投送）;
+ * `service` 直接点名其中一个分享服务，不弹面板就把它交出去。
+ */
+export const CUSTOM_KINDS = ['shell', 'app', 'shortcut', 'url', 'share', 'service']
+
+/**
+ * Reject anything that is not a small list of known kinds with a short value.
+ * A bare `{ label, command }` written by an older version keeps working: it is
+ * a shell entry.
+ */
 export function sanitizeCustomActions(value) {
   const list = Array.isArray(value) ? value : []
   if (list.length > CUSTOM_LIMITS.entries) throw new Error('too-many-entries')
   const kept = []
   for (const entry of list) {
     const label = String(entry?.label ?? '').trim()
-    const command = String(entry?.command ?? '').trim()
-    if (label === '' || command === '') continue
+    const rawKind = String(entry?.kind ?? 'shell').trim()
+    const kind = CUSTOM_KINDS.includes(rawKind) ? rawKind : 'shell'
+    const payload = String(entry?.value ?? entry?.command ?? '').trim()
+    if (label === '') continue
+    if (kind !== 'share' && payload === '') continue
     if (label.length > CUSTOM_LIMITS.label) throw new Error('label-too-long')
-    if (command.length > CUSTOM_LIMITS.command) throw new Error('command-too-long')
-    if (/[\u0000-\u001f]/u.test(label + command)) throw new Error('control-character')
-    kept.push({ label, command })
+    if (payload.length > CUSTOM_LIMITS.value) throw new Error('value-too-long')
+    if (/[\u0000-\u001f]/u.test(label + payload)) throw new Error('control-character')
+    kept.push({ label, kind, value: payload })
   }
   return kept
 }
@@ -302,6 +320,294 @@ export function customCommand(template, target = {}, platform = process.platform
   return String(template ?? '').replace(/\{(path|dir|name|url)\}/gu, (match, key) => values[key] ?? match)
 }
 
+/** 同样的占位符，但不做 shell 引用：填进链接里要保留成一个整体。 */
+export function customUrl(template, target = {}) {
+  const path = String(target.path ?? '')
+  const values = {
+    path: encodeURIComponent(path),
+    dir: encodeURIComponent(dirname(path)),
+    name: encodeURIComponent(path === '' ? '' : (path.split(/[\\/]/u).pop() ?? '')),
+    url: encodeURIComponent(String(target.url ?? '')),
+  }
+  return String(template ?? '').replace(/\{(path|dir|name|url)\}/gu, (match, key) => values[key] ?? match)
+}
+
+/* ── 系统分享：用 osascript 弹真正的 macOS 分享面板 ───────────────────── */
+
+/**
+ * macOS 的分享面板来自每家 App 自己的 share extension（微信、小米互联服务、
+ * 隔空投送都在里面），没有命令行入口。这里用 JXA 直接调 AppKit 的
+ * NSSharingServicePicker，一个看不见的 1 像素窗口当锚点，面板贴着鼠标出现；
+ * 面板关掉后脚本自己退出。不需要 Xcode，也不需要额外安装任何东西。
+ */
+const SHARE_SCRIPT = `ObjC.import('AppKit');
+ObjC.import('Foundation');
+
+function run(argv) {
+  var wanted = null;
+  if (argv.length > 1 && argv[0] === '--service') {
+    wanted = argv[1];
+    argv = argv.slice(2);
+  }
+  if (argv.length === 0) return 2;
+  var files = $.NSMutableArray.alloc.init;
+  for (var i = 0; i < argv.length; i++) {
+    files.addObject($.NSURL.fileURLWithPath(argv[i]));
+  }
+  if (wanted !== null) {
+    var services = $.NSSharingService.sharingServicesForItems(files);
+    for (var index = 0; index < services.count; index++) {
+      var candidate = services.objectAtIndex(index);
+      if (String(ObjC.unwrap(candidate.title)) === wanted) {
+        candidate.performWithItems(files);
+        $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(2.0));
+        return 0;
+      }
+    }
+    return 3;
+  }
+  var items = files;
+  var picker = $.NSSharingServicePicker.alloc.initWithItems(items);
+  var point = $.NSEvent.mouseLocation;
+  var window = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
+    $.NSMakeRect(point.x, point.y - 2, 1, 1), 0, 2, false);
+  window.alphaValue = 0;
+  window.orderFrontRegardless;
+  $.NSApplication.sharedApplication.activateIgnoringOtherApps(true);
+  picker.showRelativeToRectOfViewPreferredEdge($.NSMakeRect(0, 0, 1, 1), window.contentView, 1);
+
+  for (var tick = 0; tick < 240; tick++) {
+    $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.5));
+    var open = false;
+    var windows = $.NSApp.windows;
+    for (var index = 0; index < windows.count; index++) {
+      var name = String(ObjC.unwrap(windows.objectAtIndex(index).className));
+      if (name.indexOf('Popover') >= 0) open = true;
+    }
+    if (!open) break;
+  }
+  return 0;
+}
+`
+
+const SERVICES_SCRIPT = `ObjC.import('AppKit');
+ObjC.import('Foundation');
+function run(argv) {
+  var files = $.NSMutableArray.alloc.init;
+  files.addObject($.NSURL.fileURLWithPath(argv[0]));
+  var services = $.NSSharingService.sharingServicesForItems(files);
+  var titles = [];
+  for (var index = 0; index < services.count; index++) {
+    titles.push(String(ObjC.unwrap(services.objectAtIndex(index).title)));
+  }
+  return JSON.stringify(titles);
+}
+`
+
+export function shareHelperPaths(home = homedir()) {
+  const bin = join(home, '.dsh', 'chat-link-actions', 'bin')
+  return { bin, script: join(bin, 'share.jxa'), services: join(bin, 'services.jxa') }
+}
+
+/** 把分享脚本放到 profile 下；每次启动重写一遍，升级后自动换新版本。 */
+export async function ensureShareHelper(home = homedir(), platform = process.platform) {
+  if (platform !== 'darwin') return { ok: false, reason: 'unsupported-platform' }
+  const paths = shareHelperPaths(home)
+  try {
+    await mkdir(paths.bin, { recursive: true })
+    await writeFile(paths.script, SHARE_SCRIPT, 'utf8')
+    await writeFile(paths.services, SERVICES_SCRIPT, 'utf8')
+  } catch {
+    return { ok: false, reason: 'write-failed' }
+  }
+  return { ok: true, script: paths.script, services: paths.services }
+}
+
+/**
+ * The applications worth offering on this machine, plus the workflows whose
+ * names suggest sending. Detection is a convenience: a person can still type
+ * any entry by hand.
+ */
+const SHARE_PRESETS = [
+  { app: 'WeChat', label: '微信' },
+  { app: 'WeCom', label: '企业微信' },
+  { app: 'QQ', label: 'QQ' },
+  { app: 'DingTalk', label: '钉钉' },
+  { app: 'Feishu', label: '飞书' },
+  { app: 'Lark', label: '飞书（国际版）' },
+  { app: '小米互联服务', label: '小米互联服务' },
+  { app: 'Microsoft Outlook', label: 'Outlook' },
+  { app: 'Mail', label: '邮件' },
+]
+
+export async function detectTargets(home = homedir(), platform = process.platform) {
+  const targets = []
+  if (platform === 'darwin') {
+    const roots = ['/Applications', join(home, 'Applications'), '/System/Applications']
+    const available = new Set()
+    for (const root of roots) {
+      try {
+        const names = await readdir(root)
+        for (const name of names) available.add(name.replace(/\.app$/u, ''))
+      } catch {
+        /* a missing applications folder simply offers nothing */
+      }
+    }
+    const apps = SHARE_PRESETS.filter((preset) => available.has(preset.app))
+    /* 交给系统面板去选 App：清单里一行「名称 | 系统分享」就是这个意思。 */
+    targets.push({ label: '发送到…', kind: 'share', value: '' })
+    for (const preset of apps) targets.push({ label: preset.label, kind: 'app', value: preset.app })
+    const shortcuts = await listShortcuts()
+    for (const name of shortcuts) targets.push({ label: `快捷指令：${name}`, kind: 'shortcut', value: name })
+  } else if (platform === 'win32') {
+    const roots = [
+      join(process.env.ProgramFiles ?? 'C:\\Program Files'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'),
+      join(process.env.LOCALAPPDATA ?? '', 'Programs'),
+    ]
+    const known = [
+      { exe: 'Tencent\\WeChat\\WeChat.exe', label: '微信' },
+      { exe: 'Tencent\\WeCom\\WXWork.exe', label: '企业微信' },
+      { exe: 'Tencent\\QQNT\\QQ.exe', label: 'QQ' },
+      { exe: 'DingTalk\\Dingtalk.exe', label: '钉钉' },
+      { exe: 'Feishu\\Feishu.exe', label: '飞书' },
+    ]
+    for (const root of roots) {
+      for (const item of known) {
+        const full = join(root, item.exe)
+        try {
+          const found = await stat(full)
+          if (found.isFile()) targets.push({ label: item.label, kind: 'app', value: full })
+        } catch {
+          /* absent */
+        }
+      }
+    }
+  }
+  return targets
+}
+
+let serviceCache = { at: 0, list: [] }
+
+/**
+ * macOS 把每家 App 的分享能力登记成 NSSharingService，标题就是菜单里那行字。
+ * 枚举一次要起一个 osascript（约 1 秒），结果缓一分钟。
+ */
+export async function listShareServices() {
+  if (process.platform !== 'darwin') return []
+  if (Date.now() - serviceCache.at < 60_000) return serviceCache.list
+  const paths = shareHelperPaths()
+  const probe = join(paths.bin, 'probe.txt')
+  try {
+    await mkdir(paths.bin, { recursive: true })
+    await writeFile(probe, '')
+    await writeFile(paths.services, SERVICES_SCRIPT, 'utf8')
+  } catch {
+    return []
+  }
+  return new Promise((resolve) => {
+    const child = spawn('osascript', ['-l', 'JavaScript', paths.services, probe], {
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    let text = ''
+    const done = (list) => {
+      serviceCache = { at: Date.now(), list }
+      resolve(list)
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      done([])
+    }, 4000)
+    child.stdout.on('data', (chunk) => {
+      text += String(chunk)
+    })
+    child.on('error', () => {
+      clearTimeout(timer)
+      done([])
+    })
+    child.on('exit', () => {
+      clearTimeout(timer)
+      try {
+        const parsed = JSON.parse(text.trim() || '[]')
+        done(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [])
+      } catch {
+        done([])
+      }
+    })
+  })
+}
+
+/** Workflow names that read like 「send this somewhere」, at most a few. */
+async function listShortcuts() {
+  if (process.platform !== 'darwin') return []
+  return new Promise((resolve) => {
+    const child = spawn('shortcuts', ['list'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    let text = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      resolve([])
+    }, 2000)
+    child.stdout.on('data', (chunk) => {
+      text += String(chunk)
+    })
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve([])
+    })
+    child.on('exit', () => {
+      clearTimeout(timer)
+      const names = text.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== '')
+      resolve(names.filter((name) => /(发送|分享|手机|微信|文件)/u.test(name)).slice(0, 8))
+    })
+  })
+}
+
+/** Hand the file (or its folder) to one entry, whatever kind it is. */
+export async function runCustomAction(entry, target = {}) {
+  const path = String(target.path ?? '')
+  const folder = path === '' ? '' : dirname(path)
+  const platform = process.platform
+  if (entry.kind === 'service') {
+    if (platform !== 'darwin') throw new Error('service-needs-macos')
+    if (path === '') throw new Error('service-needs-file')
+    const helper = await ensureShareHelper()
+    if (!helper.ok) throw new Error(helper.reason ?? 'share-unavailable')
+    spawn('osascript', ['-l', 'JavaScript', helper.script, '--service', entry.value, path], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref()
+    return
+  }
+  if (entry.kind === 'share') {
+    if (path === '') throw new Error('share-needs-file')
+    const helper = await ensureShareHelper()
+    if (!helper.ok) throw new Error(helper.reason ?? 'share-unavailable')
+    spawn('osascript', ['-l', 'JavaScript', helper.script, path], { detached: true, stdio: 'ignore' }).unref()
+    return
+  }
+  if (entry.kind === 'shortcut') {
+    if (platform !== 'darwin') throw new Error('shortcut-needs-macos')
+    if (path === '') throw new Error('shortcut-needs-file')
+    spawn('shortcuts', ['run', entry.value, '-i', path], { detached: true, stdio: 'ignore' }).unref()
+    return
+  }
+  if (entry.kind === 'url') {
+    const open = customUrl(entry.value, target)
+    if (platform === 'win32') spawn(`start "" ${quoteArgument(open, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
+    else spawn('open', [open], { detached: true, stdio: 'ignore' }).unref()
+    return
+  }
+  if (entry.kind === 'app') {
+    const where = path !== '' ? path : folder
+    if (where === '') throw new Error('app-needs-file')
+    if (platform === 'win32') spawn(`start "" ${quoteArgument(entry.value, 'win32')} ${quoteArgument(where, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
+    else spawn('open', ['-a', entry.value, where], { detached: true, stdio: 'ignore' }).unref()
+    return
+  }
+  const command = customCommand(entry.value, target)
+  spawn(command, { shell: true, detached: true, stdio: 'ignore', windowsHide: false }).unref()
+}
+
 /** Read one JSON body; the route only ever accepts small payloads. */
 async function readJsonBody(req, limit = 64 * 1024) {
   const chunks = []
@@ -315,7 +621,7 @@ async function readJsonBody(req, limit = 64 * 1024) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-async function loadCustomActions(file) {
+export async function loadCustomActions(file) {
   try {
     const text = await readFile(file, 'utf8')
     return sanitizeCustomActions(JSON.parse(text))
@@ -324,12 +630,15 @@ async function loadCustomActions(file) {
   }
 }
 
-async function saveCustomActions(file, actions) {
+export async function saveCustomActions(file, actions) {
   await mkdir(dirname(file), { recursive: true })
   const temporary = `${file}.${process.pid}.tmp`
   await writeFile(temporary, `${JSON.stringify(actions, null, 2)}\n`, 'utf8')
   await rename(temporary, file)
 }
+
+/** 对外协议：数据在 protocol.json，这份代码只是把它读出来（也省得界面文案检查器把它当界面）。 */
+export const ACTION_PROTOCOL = JSON.parse(readFileSync(new URL('./protocol.json', import.meta.url), 'utf8'))
 
 export function optionalMember(ctx, name) {
   try {
@@ -361,7 +670,8 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.3.5')
+  trace('mounted 0.5.4')
+  void ensureShareHelper().catch(() => {})
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
     try {
@@ -409,6 +719,37 @@ export function apply(ctx) {
         if (action === 'actions-get') {
           return reply(res, 200, { ok: true, actions: await loadCustomActions(customActionsFile()) })
         }
+        if (action === 'actions-detect') {
+          return reply(res, 200, { ok: true, targets: await detectTargets() })
+        }
+        if (action === 'protocol') {
+          return reply(res, 200, { ok: true, protocol: ACTION_PROTOCOL })
+        }
+        if (action === 'actions-add') {
+          const body = await readJsonBody(req)
+          const incoming = sanitizeCustomActions(body?.actions)
+          const file = customActionsFile()
+          const current = body?.replace === true ? [] : await loadCustomActions(file)
+          const merged = [...current]
+          for (const entry of incoming) {
+            const index = merged.findIndex((item) => item.label === entry.label)
+            if (index >= 0) merged[index] = entry
+            else merged.push(entry)
+          }
+          const saved = sanitizeCustomActions(merged)
+          await saveCustomActions(file, saved)
+          trace(`actions-added ${incoming.map((entry) => entry.label).join(',')}`)
+          return reply(res, 200, { ok: true, actions: saved })
+        }
+        if (action === 'actions-remove') {
+          const body = await readJsonBody(req)
+          const labels = new Set((Array.isArray(body?.labels) ? body.labels : []).map((label) => String(label)))
+          const file = customActionsFile()
+          const kept = (await loadCustomActions(file)).filter((entry) => !labels.has(entry.label))
+          await saveCustomActions(file, kept)
+          trace(`actions-removed ${[...labels].join(',')}`)
+          return reply(res, 200, { ok: true, actions: kept })
+        }
         if (action === 'actions-save') {
           const body = await readJsonBody(req)
           const saved = sanitizeCustomActions(body?.actions)
@@ -419,12 +760,11 @@ export function apply(ctx) {
         if (action === 'actions-run') {
           const body = await readJsonBody(req)
           const label = String(body?.label ?? '')
+          const direct = body?.kind === 'share' ? { label: '发送到…', kind: 'share', value: '' } : null
           const actions = await loadCustomActions(customActionsFile())
-          const chosen = actions.find((entry) => entry.label === label)
+          const chosen = direct ?? actions.find((entry) => entry.label === label)
           if (chosen === undefined) return reply(res, 404, { ok: false, error: 'not-configured' })
-          const command = customCommand(chosen.command, { path: body?.path, url: body?.url })
-          const child = spawn(command, { shell: true, detached: true, stdio: 'ignore', windowsHide: false })
-          child.unref()
+          await runCustomAction(chosen, { path: body?.path, url: body?.url })
           trace(`action-ran ${chosen.label}`)
           return reply(res, 200, { ok: true })
         }

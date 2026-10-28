@@ -633,6 +633,10 @@ window.__ModuleLoader__.load({
       "border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;",
       "font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;}",
       ".dcla-editor-hint{margin:0 0 8px;font-size:12px;opacity:.66;}",
+      ".dcla-editor-targets{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;}",
+      ".dcla-editor-targets button{box-sizing:border-box;padding:3px 10px;border-radius:var(--dsw-radius-pill,999px);",
+      "border:1px solid rgba(127,127,127,.34);background:transparent;font:inherit;font-size:12px;cursor:pointer;color:inherit;}",
+      ".dcla-editor-targets button:hover{background:rgba(127,127,127,.16);}",
       ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}",
       ".dcla-editor-row button{box-sizing:border-box;padding:5px 12px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
       "background:transparent;color:inherit;font:inherit;cursor:pointer;}",
@@ -688,9 +692,12 @@ window.__ModuleLoader__.load({
         copyLink: "复制链接",  // ui-copy-ignore
         copiedLink: "已复制链接",  // ui-copy-ignore
         customize: "自定义入口…",  // ui-copy-ignore
+        share: "发送到…",  // ui-copy-ignore
+        shareFailed: "这台机器打不开系统分享",  // ui-copy-ignore
         customizeTitle: "自定义入口",  // ui-copy-ignore
-        customizeHint: "一行一个：名称 | 命令。命令里可用 {path} {dir} {name} {url}",  // ui-copy-ignore
-        customizePlaceholder: "发送到微信 | open -a WeChat {path}",  // ui-copy-ignore
+        customizeHint: "一行一个：名称 | 系统分享。点开直接弹外部 App 选择框",  // ui-copy-ignore
+        customizePlaceholder: "发送到微信 | 系统分享",  // ui-copy-ignore
+        customizeDetected: "本机可用",  // ui-copy-ignore
         save: "保存",  // ui-copy-ignore
         cancel: "取消",  // ui-copy-ignore
         saved: "已保存",
@@ -715,8 +722,11 @@ window.__ModuleLoader__.load({
         copyLink: "Copy link",  // ui-copy-ignore
         copiedLink: "Link copied",  // ui-copy-ignore
         customize: "Customize actions…",  // ui-copy-ignore
+        share: "Send to…",  // ui-copy-ignore
+        shareFailed: "System share is unavailable here",  // ui-copy-ignore
         customizeTitle: "Custom actions",  // ui-copy-ignore
-        customizeHint: "One per line: name | command. Tokens: {path} {dir} {name} {url}",  // ui-copy-ignore
+        customizeHint: "One per line: name | 系统分享 for the system panel, or name | 命令 = command",  // ui-copy-ignore
+        customizeDetected: "On this Mac",  // ui-copy-ignore
         customizePlaceholder: "Send to WeChat | open -a WeChat {path}",  // ui-copy-ignore
         save: "Save",  // ui-copy-ignore
         cancel: "Cancel",  // ui-copy-ignore
@@ -978,6 +988,15 @@ window.__ModuleLoader__.load({
       });
     }
 
+    function runShare(path) {
+      postJson("actions-run", { label: "", kind: "share", path: path, url: "" }).then(function () {
+        closeMenu(false);
+      }, function (error) {
+        report("share-failed " + String((error && error.message) || error));
+        toast(strings().shareFailed);
+      });
+    }
+
     function customMenuItems(target) {
       if (!customLoaded) refreshCustomActions();
       return customActions.map(function (entry) {
@@ -987,7 +1006,35 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** 编辑界面：一行一个「名称 | 命令」，保存后立刻出现在右键里。 */
+    var KIND_WORDS = { shell: "命令", app: "打开方式", shortcut: "快捷指令", url: "链接", share: "系统分享", service: "分享服务" };
+    var WORD_KINDS = { "命令": "shell", "打开方式": "app", "快捷指令": "shortcut", "链接": "url", "系统分享": "share", "分享服务": "service" };
+
+    function serializeAction(entry) {
+      if (entry.kind === "share") return entry.label + " | 系统分享";
+      return entry.label + " | " + (KIND_WORDS[entry.kind] || "命令") + " = " + entry.value;
+    }
+
+    function parseActionLine(text) {
+      var cut = text.indexOf("|");
+      if (cut <= 0) return null;
+      var label = text.slice(0, cut).trim();
+      var rest = text.slice(cut + 1).trim();
+      if (label === "" || rest === "") return null;
+      var word = null;
+      var eq = rest.indexOf("=");
+      if (eq > 0) word = rest.slice(0, eq).trim();
+      if (word !== null && WORD_KINDS[word] !== undefined) {
+        return { label: label, kind: WORD_KINDS[word], value: rest.slice(eq + 1).trim() };
+      }
+      return { label: label, kind: "shell", value: rest };
+    }
+
+    function lineForTarget(target) {
+      if (target.kind === "share") return target.label.replace(/…$/u, "") + " | 系统分享";
+      return target.label + " | " + (KIND_WORDS[target.kind] || "命令") + " = " + target.value;
+    }
+
+    /** 编辑界面：一行一个入口，保存后立刻出现在右键里。 */
     function openActionsEditor() {
       closeMenu(false);
       ensureStyle();
@@ -1007,9 +1054,7 @@ window.__ModuleLoader__.load({
       var area = document.createElement("textarea");
       area.setAttribute("spellcheck", "false");
       area.setAttribute("placeholder", strings().customizePlaceholder);
-      area.value = customActions.map(function (entry) {
-        return entry.label + " | " + entry.command;
-      }).join("\n");
+      area.value = customActions.map(serializeAction).join("\n");
 
       var row = document.createElement("div");
       row.className = "dcla-editor-row";
@@ -1023,7 +1068,10 @@ window.__ModuleLoader__.load({
       row.appendChild(cancel);
       row.appendChild(save);
 
+      var targets = document.createElement("div");
+      targets.className = "dcla-editor-targets";
       panel.appendChild(hint);
+      panel.appendChild(targets);
       panel.appendChild(area);
       panel.appendChild(row);
       layer.appendChild(panel);
@@ -1035,6 +1083,25 @@ window.__ModuleLoader__.load({
         panel.style.top = Math.round(Math.max(12, (window.innerHeight - box.height) / 3)) + "px";
       };
       place();
+
+      postJson("actions-detect").then(function (data) {
+        var list = Array.isArray(data.targets) ? data.targets : [];
+        if (list.length === 0) return;
+        list.forEach(function (target) {
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.textContent = target.label;
+          chip.addEventListener("click", function () {
+            var line = lineForTarget(target);
+            area.value = area.value.trim() === "" ? line : area.value.replace(/\s+$/u, "") + "\n" + line;
+            place();
+          });
+          targets.appendChild(chip);
+        });
+        place();
+      }, function () {
+        /* 检测不到就只剩手写，不影响保存 */
+      });
 
       var close = function () {
         if (layer.parentNode !== null) layer.parentNode.removeChild(layer);
@@ -1051,11 +1118,8 @@ window.__ModuleLoader__.load({
       save.addEventListener("click", function () {
         var entries = [];
         area.value.split(/\r?\n/u).forEach(function (line) {
-          var text = line.trim();
-          if (text === "") return;
-          var cut = text.indexOf("|");
-          if (cut <= 0) return;
-          entries.push({ label: text.slice(0, cut).trim(), command: text.slice(cut + 1).trim() });
+          var parsed = parseActionLine(line.trim());
+          if (parsed !== null) entries.push(parsed);
         });
         postJson("actions-save", { actions: entries }).then(function (data) {
           customActions = Array.isArray(data.actions) ? data.actions : [];
@@ -1103,6 +1167,9 @@ window.__ModuleLoader__.load({
           }, function () {
             toast(strings().clipboardFailed);
           });
+        } },
+        { id: "share", label: strings().share, icon: "share", run: function () {
+          runShare(path);
         } }
       ];
 
@@ -1445,7 +1512,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.3.5");
+      report("ready 0.5.4");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

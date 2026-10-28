@@ -14,7 +14,10 @@ import { join } from 'node:path'
 
 import {
   apply,
+  ACTION_PROTOCOL,
   customCommand,
+  customUrl,
+  CUSTOM_KINDS,
   customActionsFile,
   sanitizeCustomActions,
   quoteArgument,
@@ -329,18 +332,56 @@ test('自定义入口：模板替换按平台引用路径', () => {
   assert.equal(quoteArgument("it's", 'darwin'), "'it'\\''s'")
 })
 
+test('自定义入口：类型决定怎么把文件交出去', () => {
+  assert.deepEqual(CUSTOM_KINDS, ['shell', 'app', 'shortcut', 'url', 'share', 'service'])
+  assert.deepEqual(
+    sanitizeCustomActions([
+      { label: ' 发送到微信 ', kind: 'share' },
+      { label: '发送到手机', kind: 'app', value: ' 小米互联服务 ' },
+      { label: '分享给设备', kind: 'service', value: ' 小米互联服务 ' },
+      { label: '快捷发送', kind: 'shortcut', value: '发送到手机' },
+      { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}' },
+      { label: '打开', command: 'open -a WeChat {path}' },
+      { label: '未知类型', kind: 'sudo', value: 'rm -rf' },
+      { label: '空的', kind: 'app', value: '  ' }
+    ]),
+    [
+      { label: '发送到微信', kind: 'share', value: '' },
+      { label: '发送到手机', kind: 'app', value: '小米互联服务' },
+      { label: '分享给设备', kind: 'service', value: '小米互联服务' },
+      { label: '快捷发送', kind: 'shortcut', value: '发送到手机' },
+      { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}' },
+      { label: '打开', kind: 'shell', value: 'open -a WeChat {path}' },
+      { label: '未知类型', kind: 'shell', value: 'rm -rf' }
+    ]
+  )
+  assert.equal(customUrl('mi://send?p={path}', { path: '/tmp/a b.png' }), 'mi://send?p=%2Ftmp%2Fa%20b.png')
+})
+
 test('自定义入口：只收有限的小清单', () => {
   assert.deepEqual(sanitizeCustomActions([{ label: ' A ', command: ' echo {path} ' }, { label: '', command: 'x' }]), [
-    { label: 'A', command: 'echo {path}' }
+    { label: 'A', kind: 'shell', value: 'echo {path}' }
   ])
   assert.deepEqual(sanitizeCustomActions('nope'), [])
   const many = Array.from({ length: 21 }, (_, index) => ({ label: `l${index}`, command: 'true' }))
   assert.throws(() => sanitizeCustomActions(many), /too-many-entries/u)
   assert.throws(() => sanitizeCustomActions([{ label: 'x'.repeat(41), command: 'true' }]), /label-too-long/u)
-  assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x'.repeat(401) }]), /command-too-long/u)
+  assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x'.repeat(401) }]), /value-too-long/u)
   assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x\ny' }]), /control-character/u)
 })
 
 test('自定义入口：配置文件在 profile 下', () => {
   assert.equal(customActionsFile('/Users/apple'), '/Users/apple/.dsh/chat-link-actions/custom-actions.json')
+})
+
+test('对外协议：一份数据说清所有入口类型和调用方式', () => {
+  assert.equal(ACTION_PROTOCOL.version, 1)
+  assert.deepEqual(ACTION_PROTOCOL.kinds.map((item) => item.kind).sort(), [...CUSTOM_KINDS].sort())
+  for (const entry of ACTION_PROTOCOL.kinds) {
+    assert.equal(typeof entry.effect, 'string')
+    assert.deepEqual(Object.keys(entry.example).sort(), ['kind', 'label', 'value'])
+    assert.ok(CUSTOM_KINDS.includes(entry.example.kind))
+  }
+  assert.ok(ACTION_PROTOCOL.http.routes.some((route) => route.action === 'actions-add'))
+  assert.equal(ACTION_PROTOCOL.limits.entries, 20)
 })

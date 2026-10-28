@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "storage": {
+    "file": "~/.dsh/chat-link-actions/actions.json",
+    "shape": "{ \"version\": 1, \"actions\": [ { \"label\": string, \"kind\": Kind, \"value\": string } ] }",
+    "note": "这个文件和菜单共用；写入即生效，不用重启。"
+  },
+  "limits": {
+    "entries": 20,
+    "label": 40,
+    "value": 400
+  },
+  "placeholders": [
+    "{path}",
+    "{dir}",
+    "{name}",
+    "{url}"
+  ],
+  "kinds": [
+    {
+      "kind": "service",
+      "platform": "darwin",
+      "value": "原生分享服务的标题，例如 发送到微信",
+      "effect": "把文件直接交给那个 App 的分享扩展，不弹面板",
+      "example": {
+        "label": "发送到微信",
+        "kind": "service",
+        "value": "发送到微信"
+      }
+    },
+    {
+      "kind": "share",
+      "platform": "darwin",
+      "value": "",
+      "effect": "弹出系统分享面板，让用户在面板里选目标",
+      "example": {
+        "label": "系统分享",
+        "kind": "share",
+        "value": ""
+      }
+    },
+    {
+      "kind": "app",
+      "value": "App 名称（macOS）或可执行文件路径（Windows）",
+      "effect": "用这个 App 打开文件",
+      "example": {
+        "label": "用预览打开",
+        "kind": "app",
+        "value": "Preview"
+      }
+    },
+    {
+      "kind": "shortcut",
+      "platform": "darwin",
+      "value": "快捷指令名称",
+      "effect": "用文件当输入跑一遍这个快捷指令",
+      "example": {
+        "label": "存到手机",
+        "kind": "shortcut",
+        "value": "存到手机"
+      }
+    },
+    {
+      "kind": "url",
+      "value": "带占位符的链接",
+      "effect": "把占位符替换并编码后打开这条链接，交给注册了该协议的 App",
+      "example": {
+        "label": "发送到小米手机",
+        "kind": "url",
+        "value": "mi://send?p={path}"
+      }
+    },
+    {
+      "kind": "shell",
+      "value": "命令行模板，占位符会被正确加引号",
+      "effect": "跑这条命令，自己决定发去哪",
+      "example": {
+        "label": "传到服务器",
+        "kind": "shell",
+        "value": "scp {path} phone:/tmp/"
+      }
+    }
+  ],
+  "http": {
+    "base": "/chat-link-actions",
+    "fenced": "只接受 DSH 页面发起的请求",
+    "routes": [
+      {
+        "action": "protocol",
+        "method": "POST",
+        "body": null,
+        "returns": "这份协议本身"
+      },
+      {
+        "action": "actions-get",
+        "method": "POST",
+        "body": null,
+        "returns": "{ actions }"
+      },
+      {
+        "action": "actions-detect",
+        "method": "POST",
+        "body": null,
+        "returns": "{ targets: 本机可用的 target[] }"
+      },
+      {
+        "action": "actions-add",
+        "method": "POST",
+        "body": "{ actions: entry[], replace?: boolean }",
+        "returns": "{ actions }"
+      },
+      {
+        "action": "actions-remove",
+        "method": "POST",
+        "body": "{ labels: string[] }",
+        "returns": "{ actions }"
+      },
+      {
+        "action": "actions-save",
+        "method": "POST",
+        "body": "{ actions: entry[] }",
+        "returns": "{ actions }"
+      },
+      {
+        "action": "actions-run",
+        "method": "POST",
+        "body": "{ label, path?, url? }",
+        "returns": "{ ok }"
+      }
+    ]
+  },
+  "cli": [
+    "node <plugin>/cli.js protocol",
+    "node <plugin>/cli.js list",
+    "node <plugin>/cli.js add --label 发送到微信 --kind service --value 发送到微信",
+    "node <plugin>/cli.js remove 发送到微信",
+    "node <plugin>/cli.js detect",
+    "node <plugin>/cli.js run 发送到微信 --path /tmp/a.png"
+  ]
+}
