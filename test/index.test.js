@@ -371,7 +371,8 @@ test('自定义入口：只收有限的小清单', () => {
 })
 
 test('自定义入口：配置文件在 profile 下', () => {
-  assert.equal(customActionsFile('/Users/apple'), '/Users/apple/.dsh/chat-link-actions/custom-actions.json')
+  assert.equal(customActionsFile('/home/me'), join('/home/me', '.dsh', 'chat-link-actions', 'custom-actions.json'))
+  assert.ok(customActionsFile('/home/me').endsWith('custom-actions.json'))
 })
 
 test('对外协议：一份数据说清所有入口类型和调用方式', () => {
