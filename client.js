@@ -989,9 +989,36 @@ window.__ModuleLoader__.load({
       });
     }
 
+    /** 面板开着的时候，用户点界面任何地方就把它收掉。 */
+    var shareWatcher = null;
+    function watchShareDismiss() {
+      stopShareDismiss();
+      var fired = false;
+      var kill = function () {
+        if (fired) return;
+        fired = true;
+        stopShareDismiss();
+        postJson("share-cancel", {}).catch(function () {});
+      };
+      var onDown = function () { kill(); };
+      var onBlur = function () { kill(); };
+      shareWatcher = function () {
+        document.removeEventListener("pointerdown", onDown, true);
+        window.removeEventListener("blur", onBlur);
+        shareWatcher = null;
+      };
+      document.addEventListener("pointerdown", onDown, true);
+      window.addEventListener("blur", onBlur);
+      setTimeout(function () { if (shareWatcher !== null) stopShareDismiss(); }, 120000);
+    }
+    function stopShareDismiss() {
+      if (shareWatcher !== null) shareWatcher();
+    }
+
     function runShare(path) {
       postJson("actions-run", { label: "", kind: "share", path: path, url: "" }).then(function () {
         closeMenu(false);
+        watchShareDismiss();
       }, function (error) {
         report("share-failed " + String((error && error.message) || error));
         toast(strings().shareFailed);
@@ -1546,7 +1573,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.5.6");
+      report("ready 0.5.7");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

@@ -344,11 +344,26 @@ const SHARE_SCRIPT = `ObjC.import('AppKit');
 ObjC.import('Foundation');
 
 function run(argv) {
+  var args = argv.slice(0);
   var wanted = null;
-  if (argv.length > 1 && argv[0] === '--service') {
-    wanted = argv[1];
-    argv = argv.slice(2);
+  if (args.length > 0 && args[0] === '--warm') {
+    /* 常驻预热：路径从 stdin 读一行 JSON，读不到就退出。 */
+    var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+    var text = '';
+    try {
+      if (data.length > 0) text = String(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding)));
+    } catch (error) {
+      text = '';
+    }
+    var first = String(text).split(String.fromCharCode(10))[0].trim();
+    if (first === '') return 2;
+    args = [JSON.parse(first).path];
   }
+  if (args.length > 1 && args[0] === '--service') {
+    wanted = args[1];
+    args = args.slice(2);
+  }
+  argv = args;
   if (argv.length === 0) return 2;
   var files = $.NSMutableArray.alloc.init;
   for (var i = 0; i < argv.length; i++) {
@@ -563,6 +578,71 @@ async function listShortcuts() {
 }
 
 /** Hand the file (or its folder) to one entry, whatever kind it is. */
+/* 系统分享面板：助手进程提前预热，点开即出；再点界面任一处就把面板收掉。 */
+let warmShare = null
+let activeShare = null
+
+function dropChild(child, slot) {
+  if (slot === 'warm' && warmShare === child) warmShare = null
+  if (slot === 'active' && activeShare === child) activeShare = null
+}
+
+function warmShareHelper(paths = shareHelperPaths()) {
+  if (process.platform !== 'darwin') return
+  /* 测试进程里不预热：子进程会让 node --test 一直不退出。 */
+  if (process.env.NODE_TEST_CONTEXT !== undefined) return
+  if (warmShare !== null) return
+  try {
+    const child = spawn('osascript', ['-l', 'JavaScript', paths.script, '--warm'], {
+      stdio: ['pipe', 'ignore', 'ignore']
+    })
+    child.on('error', () => dropChild(child, 'warm'))
+    child.on('exit', () => dropChild(child, 'warm'))
+    if (child.stdin !== null) {
+      child.stdin.on('error', () => {})
+      child.stdin.unref?.()
+    }
+    child.unref()
+    warmShare = child
+  } catch (error) {
+    warmShare = null
+  }
+}
+
+/** 面板打开后任一次外部点击都会 kill 这个进程，弹窗随之消失。 */
+export function cancelSharePanel() {
+  if (activeShare === null) return false
+  const child = activeShare
+  activeShare = null
+  try {
+    child.kill('SIGTERM')
+  } catch (error) {
+    /* 已经退出 */
+  }
+  return true
+}
+
+function showSharePanel(path, paths) {
+  const ready = warmShare
+  if (ready !== null) {
+    warmShare = null
+    activeShare = ready
+    ready.on('exit', () => dropChild(ready, 'active'))
+    try {
+      ready.stdin.write(JSON.stringify({ path }) + '\n')
+      ready.stdin.end()
+      warmShareHelper(paths)
+      return
+    } catch (error) {
+      activeShare = null
+    }
+  }
+  const child = spawn('osascript', ['-l', 'JavaScript', paths.script, path], { detached: true, stdio: 'ignore' })
+  child.unref()
+  activeShare = child
+  child.on('exit', () => dropChild(child, 'active'))
+}
+
 export async function runCustomAction(entry, target = {}) {
   const path = String(target.path ?? '')
   const folder = path === '' ? '' : dirname(path)
@@ -582,7 +662,7 @@ export async function runCustomAction(entry, target = {}) {
     if (path === '') throw new Error('share-needs-file')
     const helper = await ensureShareHelper()
     if (!helper.ok) throw new Error(helper.reason ?? 'share-unavailable')
-    spawn('osascript', ['-l', 'JavaScript', helper.script, path], { detached: true, stdio: 'ignore' }).unref()
+    showSharePanel(path, shareHelperPaths())
     return
   }
   if (entry.kind === 'shortcut') {
@@ -670,8 +750,22 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.5.6')
-  void ensureShareHelper().catch(() => {})
+  trace('mounted 0.5.7')
+  void ensureShareHelper().then((helper) => {
+    if (helper.ok === true) warmShareHelper(shareHelperPaths())
+  }).catch(() => {})
+  ctx.effect(() => () => {
+    cancelSharePanel()
+    const spare = warmShare
+    warmShare = null
+    if (spare !== null) {
+      try {
+        spare.kill('SIGTERM')
+      } catch (ignored) {
+        /* 已经退出 */
+      }
+    }
+  })
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
     try {
@@ -756,6 +850,10 @@ export function apply(ctx) {
           await saveCustomActions(customActionsFile(), saved)
           trace(`actions-saved ${saved.length}`)
           return reply(res, 200, { ok: true, actions: saved })
+        }
+        if (action === 'share-cancel') {
+          trace(`share-cancel ${cancelSharePanel() ? 'hit' : 'miss'}`)
+          return reply(res, 200, { ok: true })
         }
         if (action === 'actions-run') {
           const body = await readJsonBody(req)
