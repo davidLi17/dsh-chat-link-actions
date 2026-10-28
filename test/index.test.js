@@ -14,6 +14,10 @@ import { join } from 'node:path'
 
 import {
   apply,
+  customCommand,
+  customActionsFile,
+  sanitizeCustomActions,
+  quoteArgument,
   encodeExplorerSelect,
   encodeWindowsArgument,
   extendedWindowsPath,
@@ -312,3 +316,31 @@ test('Windows：verbatim 盘根保留分隔符，explorer 只加一层引号', (
   assert.deepEqual(flat(revealCommand('C:\\a b', 'win32', { isDirectory: true })), ['explorer.exe', '"C:\\a b"'])
 })
 
+
+test('自定义入口：模板替换按平台引用路径', () => {
+  const target = { path: '/Users/apple/My Dir/a b.md', url: 'https://x.test/p' }
+  assert.equal(
+    customCommand('open -a WeChat {path}', target, 'darwin'),
+    "open -a WeChat '/Users/apple/My Dir/a b.md'"
+  )
+  assert.equal(customCommand('explorer {dir}', target, 'win32'), 'explorer "/Users/apple/My Dir"')
+  assert.equal(customCommand('{name}', target, 'darwin'), "'a b.md'")
+  assert.equal(customCommand('open {url}', target, 'darwin'), "open 'https://x.test/p'")
+  assert.equal(quoteArgument("it's", 'darwin'), "'it'\\''s'")
+})
+
+test('自定义入口：只收有限的小清单', () => {
+  assert.deepEqual(sanitizeCustomActions([{ label: ' A ', command: ' echo {path} ' }, { label: '', command: 'x' }]), [
+    { label: 'A', command: 'echo {path}' }
+  ])
+  assert.deepEqual(sanitizeCustomActions('nope'), [])
+  const many = Array.from({ length: 21 }, (_, index) => ({ label: `l${index}`, command: 'true' }))
+  assert.throws(() => sanitizeCustomActions(many), /too-many-entries/u)
+  assert.throws(() => sanitizeCustomActions([{ label: 'x'.repeat(41), command: 'true' }]), /label-too-long/u)
+  assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x'.repeat(401) }]), /command-too-long/u)
+  assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x\ny' }]), /control-character/u)
+})
+
+test('自定义入口：配置文件在 profile 下', () => {
+  assert.equal(customActionsFile('/Users/apple'), '/Users/apple/.dsh/chat-link-actions/custom-actions.json')
+})

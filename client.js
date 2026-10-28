@@ -513,6 +513,76 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** 右键落在图片上：图片自己就是被操作的对象。 */
+    /** 右键落在链接上时，链接本身也是可操作对象。 */
+    function linkTarget(node) {
+      for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        var href = el.getAttribute("href");
+        if (href !== null && /^https?:/i.test(href)) return String(href);
+        if (el.tagName === "IMG") {
+          var source = el.getAttribute("src");
+          if (source !== null && /^https?:/i.test(source)) return String(source);
+        }
+      }
+      return null;
+    }
+
+    function imageTarget(node) {
+      for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        if (el.tagName === "IMG") return el;
+      }
+      return null;
+    }
+
+    function imageSource(image) {
+      var source = image.currentSrc || image.getAttribute("src") || "";
+      return source === "" ? null : String(source);
+    }
+
+    /**
+     * 图片在磁盘上的位置：只认明确的来源（file:// 或 data-* / title），
+     * 不把 `/attachments/...` 这类页面地址当成文件路径。
+     */
+    function imageFilePath(image) {
+      for (var el = image; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        var source = el.getAttribute("src");
+        if (source !== null && /^file:/i.test(source)) {
+          var decoded = decodePathFromHref(source);
+          if (decoded !== null) return decoded;
+        }
+        var dataset = el.dataset || {};
+        var keys = Object.keys(dataset);
+        for (var i = 0; i < keys.length; i += 1) {
+          if (!/path|file|href|src|dir|folder|abs/i.test(keys[i])) continue;
+          var candidate = normalizeCandidate(dataset[keys[i]]);
+          if (candidate !== null && looksAbsolute(candidate)) return candidate;
+        }
+        var title = normalizeCandidate(el.getAttribute("title"));
+        if (title !== null && looksAbsolute(title)) return title;
+      }
+      return null;
+    }
+
+    /** 图片进剪贴板：粘贴出来就是图片，不再是那串文件名。 */
+    function copyImage(source) {
+      var request = typeof fetch === "function" ? fetch(source, { credentials: "include" }) : Promise.reject(new Error("no fetch"));
+      request.then(function (response) {
+        if (response.ok !== true) throw new Error("status " + response.status);
+        return response.blob();
+      }).then(function (blob) {
+        var type = blob.type === "" ? "image/png" : blob.type;
+        return navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+      }).then(function () {
+        toast(strings().copiedImage);
+      }, function (error) {
+        report("copy-image-failed " + String((error && error.message) || error));
+        toast(strings().clipboardFailed);
+      });
+    }
+
     function pathFromNode(start, point) {
       for (var node = start; node !== null && node !== undefined && node !== document.body; node = node.parentElement) {
         if (node.nodeType !== 1) continue;
@@ -544,6 +614,20 @@ window.__ModuleLoader__.load({
     /* ── menu styling: project tokens only, no new palette ──────────────── */
 
     var STYLE_ID = "dsh-chat-link-actions-style";
+    var CSS_EXTRA = [
+      ".dcla-editor{position:fixed;z-index:1101;pointer-events:auto;box-sizing:border-box;padding:12px;min-width:360px;",
+      "max-width:min(520px,calc(100vw - 32px));background:var(--dsw-specific-menu,rgba(30,32,38,.96));",
+      "color:var(--dsw-alias-label-primary,#f2f3f5);border-radius:var(--dsw-radius-lg,12px);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.3));",
+      "font:13px/1.5 system-ui,-apple-system,'PingFang SC',sans-serif;}",
+      ".dcla-editor textarea{box-sizing:border-box;width:100%;min-height:150px;resize:vertical;padding:8px;",
+      "border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;",
+      "font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;}",
+      ".dcla-editor-hint{margin:0 0 8px;font-size:12px;opacity:.66;}",
+      ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}",
+      ".dcla-editor-row button{box-sizing:border-box;padding:5px 12px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
+      "background:transparent;color:inherit;font:inherit;cursor:pointer;}",
+      ".dcla-editor-row button[data-primary=\"true\"]{background:rgba(127,127,127,.22);border-color:transparent;}"
+    ].join("");
     var CSS = [
       ".dcla-layer{position:fixed;inset:0;z-index:1100;pointer-events:none;}",
       ".dcla-menu{position:fixed;z-index:1100;pointer-events:auto;box-sizing:border-box;padding:6px;min-width:200px;",
@@ -587,7 +671,21 @@ window.__ModuleLoader__.load({
         quoteFailed: "当前会话无法插入引用",
         revealPending: "已请求打开，窗口可能稍后出现",
         managerFailed: "无法打开文件管理器",
-        clipboardFailed: "剪贴板不可用"  // ui-copy-ignore
+        menuFailed: "菜单没能打开，再试一次",
+        clipboardFailed: "剪贴板不可用",  // ui-copy-ignore
+        copyImage: "复制图片",  // ui-copy-ignore
+        imageCaption: "图片",
+        copyLink: "复制链接",  // ui-copy-ignore
+        copiedLink: "已复制链接",  // ui-copy-ignore
+        customize: "自定义入口…",  // ui-copy-ignore
+        customizeTitle: "自定义入口",  // ui-copy-ignore
+        customizeHint: "一行一个：名称 | 命令。命令里可用 {path} {dir} {name} {url}",  // ui-copy-ignore
+        customizePlaceholder: "发送到微信 | open -a WeChat {path}",  // ui-copy-ignore
+        save: "保存",  // ui-copy-ignore
+        cancel: "取消",  // ui-copy-ignore
+        saved: "已保存",
+        saveFailed: "没能保存，再试一次",
+        copiedImage: "已复制图片"  // ui-copy-ignore
       },
       en: {  // ui-copy-ignore
         menu: "File actions",  // ui-copy-ignore
@@ -600,7 +698,21 @@ window.__ModuleLoader__.load({
         quoteFailed: "This conversation cannot take the reference",
         revealPending: "Open requested; the window may appear shortly",
         managerFailed: "Could not open the file manager",
-        clipboardFailed: "Clipboard unavailable"  // ui-copy-ignore
+        menuFailed: "Menu did not open; try again",
+        clipboardFailed: "Clipboard unavailable",
+        copyImage: "Copy image",  // ui-copy-ignore
+        imageCaption: "Image",
+        copyLink: "Copy link",  // ui-copy-ignore
+        copiedLink: "Link copied",  // ui-copy-ignore
+        customize: "Customize actions…",  // ui-copy-ignore
+        customizeTitle: "Custom actions",  // ui-copy-ignore
+        customizeHint: "One per line: name | command. Tokens: {path} {dir} {name} {url}",  // ui-copy-ignore
+        customizePlaceholder: "Send to WeChat | open -a WeChat {path}",  // ui-copy-ignore
+        save: "Save",  // ui-copy-ignore
+        cancel: "Cancel",  // ui-copy-ignore
+        saved: "Saved",
+        saveFailed: "Could not save, try again",
+        copiedImage: "Image copied"  // ui-copy-ignore  // ui-copy-ignore
       }
     };
 
@@ -615,7 +727,7 @@ window.__ModuleLoader__.load({
       if (document.getElementById(STYLE_ID) !== null) return;
       var style = document.createElement("style");
       style.id = STYLE_ID;
-      style.textContent = CSS;
+      style.textContent = CSS + CSS_EXTRA;
       document.head.appendChild(style);
     }
 
@@ -624,6 +736,8 @@ window.__ModuleLoader__.load({
     var ICONS = {
       quote: ["M2.5 4.5h11M2.5 8h7M2.5 11.5h9"],
       reveal: ["M2 5.7A1.6 1.6 0 0 1 3.6 4.1h2.2l1.2 1.5h4.6A1.6 1.6 0 0 1 13.2 7.2v4.6A1.6 1.6 0 0 1 11.6 13.4h-8A1.6 1.6 0 0 1 2 11.8V5.7Z"],
+      image: ["M2.4 3.6h11.2v8.8H2.4z", "M2.4 10.6l3.2-3 2.6 2.4 2.2-2 3.2 3"],
+      custom: ["M8 2.6v10.8M2.6 8h10.8"],
       copy: ["M5.6 5.6h6.8v6.8H5.6z", "M10.4 5.6V4.2A1.6 1.6 0 0 0 8.8 2.6H4.2A1.6 1.6 0 0 0 2.6 4.2v4.6A1.6 1.6 0 0 0 4.2 10.4h1.4"]
     };
 
@@ -748,22 +862,24 @@ window.__ModuleLoader__.load({
       if (active !== undefined) open.panel.setAttribute("aria-activedescendant", active.id);
     }
 
-    function buildMenu(path, items) {
+    function buildMenu(captionText, items) {
       var panel = document.createElement("div");
       panel.className = "dcla-menu";
       panel.setAttribute("role", "menu");
       panel.setAttribute("aria-label", strings().menu);
       panel.setAttribute("aria-activedescendant", "dcla-item-0");
 
-      var caption = document.createElement("div");
-      caption.className = "dcla-path";
-      caption.title = path;
-      caption.textContent = path;
-      panel.appendChild(caption);
+      if (captionText !== null && captionText !== undefined && captionText !== "") {
+        var caption = document.createElement("div");
+        caption.className = "dcla-path";
+        caption.title = captionText;
+        caption.textContent = captionText;
+        panel.appendChild(caption);
 
-      var separator = document.createElement("div");
-      separator.className = "dcla-sep";
-      panel.appendChild(separator);
+        var separator = document.createElement("div");
+        separator.className = "dcla-sep";
+        panel.appendChild(separator);
+      }
 
       var buttons = [];
       items.forEach(function (item, position) {
@@ -807,12 +923,161 @@ window.__ModuleLoader__.load({
       return { panel: panel, buttons: buttons };
     }
 
+    /* ── 自定义入口 ─────────────────────────────────────────────────────── */
+
+    var customActions = [];
+    var customLoaded = false;
+
+    function routeUrl(action) {
+      return "/chat-link-actions?action=" + encodeURIComponent(action);
+    }
+
+    function postJson(action, body) {
+      return fetch(routeUrl(action), {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body === undefined ? {} : body)
+      }).then(function (response) {
+        return response.json();
+      }).then(function (data) {
+        if (data === null || data === undefined || data.ok !== true) {
+          throw new Error(String((data && data.error) || "bad-response"));
+        }
+        return data;
+      });
+    }
+
+    function refreshCustomActions() {
+      postJson("actions-get").then(function (data) {
+        customActions = Array.isArray(data.actions) ? data.actions : [];
+        customLoaded = true;
+        report("actions-loaded " + String(customActions.length));
+      }, function (error) {
+        customLoaded = true;
+        report("actions-get-failed " + String((error && error.message) || error));
+      });
+    }
+
+    function runCustom(label, target) {
+      postJson("actions-run", { label: label, path: target.path || "", url: target.url || "" }).then(function () {
+        closeMenu(false);
+      }, function (error) {
+        report("action-failed " + label + " " + String((error && error.message) || error));
+        toast(strings().clipboardFailed);
+      });
+    }
+
+    function customMenuItems(target) {
+      if (!customLoaded) refreshCustomActions();
+      return customActions.map(function (entry) {
+        return { id: "custom:" + entry.label, label: entry.label, icon: "custom", run: function () {
+          runCustom(entry.label, target);
+        } };
+      });
+    }
+
+    /** 编辑界面：一行一个「名称 | 命令」，保存后立刻出现在右键里。 */
+    function openActionsEditor() {
+      closeMenu(false);
+      ensureStyle();
+      var layer = document.createElement("div");
+      layer.className = "dcla-layer";
+      layer.style.pointerEvents = "auto";
+
+      var panel = document.createElement("div");
+      panel.className = "dcla-editor";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", strings().customizeTitle);
+
+      var hint = document.createElement("p");
+      hint.className = "dcla-editor-hint";
+      hint.textContent = strings().customizeHint;
+
+      var area = document.createElement("textarea");
+      area.setAttribute("spellcheck", "false");
+      area.setAttribute("placeholder", strings().customizePlaceholder);
+      area.value = customActions.map(function (entry) {
+        return entry.label + " | " + entry.command;
+      }).join("\n");
+
+      var row = document.createElement("div");
+      row.className = "dcla-editor-row";
+      var cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = strings().cancel;
+      var save = document.createElement("button");
+      save.type = "button";
+      save.setAttribute("data-primary", "true");
+      save.textContent = strings().save;
+      row.appendChild(cancel);
+      row.appendChild(save);
+
+      panel.appendChild(hint);
+      panel.appendChild(area);
+      panel.appendChild(row);
+      layer.appendChild(panel);
+      document.body.appendChild(layer);
+
+      var place = function () {
+        var box = panel.getBoundingClientRect();
+        panel.style.left = Math.round(Math.max(12, (window.innerWidth - box.width) / 2)) + "px";
+        panel.style.top = Math.round(Math.max(12, (window.innerHeight - box.height) / 3)) + "px";
+      };
+      place();
+
+      var close = function () {
+        if (layer.parentNode !== null) layer.parentNode.removeChild(layer);
+        document.removeEventListener("keydown", onKey, true);
+      };
+      var onKey = function (event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          close();
+        }
+      };
+
+      cancel.addEventListener("click", close);
+      save.addEventListener("click", function () {
+        var entries = [];
+        area.value.split(/\r?\n/u).forEach(function (line) {
+          var text = line.trim();
+          if (text === "") return;
+          var cut = text.indexOf("|");
+          if (cut <= 0) return;
+          entries.push({ label: text.slice(0, cut).trim(), command: text.slice(cut + 1).trim() });
+        });
+        postJson("actions-save", { actions: entries }).then(function (data) {
+          customActions = Array.isArray(data.actions) ? data.actions : [];
+          customLoaded = true;
+          close();
+          toast(strings().saved);
+        }, function (error) {
+          report("actions-save-failed " + String((error && error.message) || error));
+          toast(strings().saveFailed);
+        });
+      });
+
+      document.addEventListener("keydown", onKey, true);
+      area.focus();
+    }
+
     function openMenu(path, x, y, options) {
       closeMenu(false);
       ensureStyle();
       var settings = options === null || options === undefined ? {} : options;
 
-      var items = [
+      var image = settings.image === undefined || settings.image === null ? null : String(settings.image);
+      var url = settings.url === undefined || settings.url === null ? null : String(settings.url);
+      var hasPath = path !== null && path !== undefined;
+      var items = [];
+      if (image !== null) {
+        items.push({ id: "copyImage", label: strings().copyImage, icon: "image", run: function () {
+          copyImage(image);
+        } });
+      }
+
+      var pathItems = [
         { id: "quote", label: strings().quote, icon: "quote", run: function () {
           var sessionId = settings.sessionId;
           var directory = settings.directory;
@@ -832,14 +1097,31 @@ window.__ModuleLoader__.load({
       ];
 
       if (settings.inField === true) {
-        items = items.filter(function (item) {
+        pathItems = pathItems.filter(function (item) {
           return item.id !== "quote";
         });
       }
+      if (hasPath) items = items.concat(pathItems);
+      if (url !== null) {
+        items.push({ id: "copyLink", label: strings().copyLink, icon: "copy", run: function () {
+          navigator.clipboard.writeText(url).then(function () {
+            toast(strings().copiedLink);
+          }, function () {
+            toast(strings().clipboardFailed);
+          });
+        } });
+      }
+      items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
+      if (hasPath || url !== null) {
+        items.push({ id: "customize", label: strings().customize, icon: "custom", run: function () {
+          openActionsEditor();
+        } });
+      }
+      if (items.length === 0) return;
 
       var layer = document.createElement("div");
       layer.className = "dcla-layer";
-      var built = buildMenu(path, items);
+      var built = buildMenu(hasPath ? path : "", items);
       layer.appendChild(built.panel);
       document.body.appendChild(layer);
 
@@ -1061,6 +1343,11 @@ window.__ModuleLoader__.load({
     /** 插件自己的故障只记一条日志，绝不让页面上的右键整体失效。 */
     function noteFailure(error) {
       try {
+        toast(strings().menuFailed);
+      } catch (ignored) {
+        /* a failure toast must never throw either */
+      }
+      try {
         var context = rootContext;
         if (context !== null && context !== undefined && typeof context.logger?.warn === "function") {
           context.logger.warn("chat-link-actions: menu failed: " + String(error && error.message ? error.message : error));
@@ -1068,6 +1355,24 @@ window.__ModuleLoader__.load({
       } catch (ignored) {
         /* logging must never throw */
       }
+    }
+
+    /** 能打字的区域：输入框、文本域、可编辑块。用于区分「在输入框里」与页面正文。 */
+    function editableField(node) {
+      for (var el = node; el !== null && el !== undefined; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        var tag = el.tagName;
+        if (tag === "TEXTAREA" || tag === "SELECT") return true;
+        if (tag === "INPUT") {
+          var kind = String(el.getAttribute("type") || "text").toLowerCase();
+          if (kind === "checkbox" || kind === "radio" || kind === "button" || kind === "submit" || kind === "file" || kind === "range") continue;
+          return true;
+        }
+        if (el.isContentEditable === true) return true;
+        var editable = el.getAttribute("contenteditable");
+        if (editable === "true" || editable === "") return true;
+      }
+      return false;
     }
 
     /** Prose needs a real path shape: /help and skill chips must stay native. */
@@ -1098,20 +1403,28 @@ window.__ModuleLoader__.load({
     function onContextMenu(event) {
       if (!(event.target instanceof Element)) return;
       var target = event.target;
+      var probeTag = target.tagName + "." + String(target.className || "").slice(0, 60);
       try {
         var inField = editableField(target);
+        var image = imageTarget(target);
+        var imageUrl = image === null ? null : imageSource(image);
+        var url = linkTarget(target);
         proseCandidate = false;
-        var path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
-        if (path === null) return;
-        if (proseCandidate && !looksLikePath(path)) return;
-        openMenu(path, event.clientX, event.clientY, {
-          inField: inField,
-          directory: directoryHint(target),
-          sessionId: sessionOfNode(target)
-        });
+        var path = image === null ? pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField }) : imageFilePath(image);
+        report("ctx " + probeTag + " path=" + (path === null ? "null" : String(path).slice(0, 140)) + " img=" + (imageUrl === null ? "null" : String(imageUrl).slice(0, 100)) + " url=" + (url === null ? "null" : String(url).slice(0, 100)));
+        if (path === null && imageUrl === null && url === null) return;
+        if (path !== null && proseCandidate && !looksLikePath(path)) return;
+        var options = {};
+        options.inField = inField;
+        options.directory = directoryHint(target);
+        options.sessionId = sessionOfNode(target);
+        options.image = imageUrl;
+        options.url = url;
+        openMenu(path, event.clientX, event.clientY, options);
         event.preventDefault();
         event.stopPropagation();
       } catch (error) {
+        report("ctx-threw " + (error && error.message ? error.message : String(error)));
         closeMenu(false);
         noteFailure(error);
       }
@@ -1122,7 +1435,9 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
+      report("ready 0.3.4");
       rootContext = ctx;
+      refreshCustomActions();
       ctx.effect(function () {
         document.addEventListener("contextmenu", onContextMenu, true);
         return function () {
@@ -1151,6 +1466,10 @@ window.__ModuleLoader__.load({
     testSeams.stripLineSuffix = stripLineSuffix;
     testSeams.looksLikePath = looksLikePath;
     testSeams.withoutTrailingSeparator = withoutTrailingSeparator;
+    testSeams.editableField = editableField;
+    testSeams.contextMenu = onContextMenu;
+    testSeams.imageTarget = imageTarget;
+    testSeams.linkTarget = linkTarget;
     module.exports = {};
     module.exports.inject = inject;
     module.exports.apply = apply;

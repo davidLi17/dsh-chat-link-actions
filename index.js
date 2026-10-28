@@ -8,8 +8,8 @@
  * the argv is never shell-interpolated.
  */
 
-import { execFile } from 'node:child_process'
-import { appendFile, lstat, stat } from 'node:fs/promises'
+import { execFile, spawn } from 'node:child_process'
+import { appendFile, lstat, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dirname, isAbsolute, win32 as pathWin32 } from 'node:path'
@@ -256,6 +256,81 @@ function reply(res, status, body) {
  * answers nothing, while a test context that carries the value directly or as
  * a service still gets it.
  */
+/* ── 自定义入口：用户自己加的菜单项 ───────────────────────────────────── */
+
+/** Where the user's own menu entries live; one small JSON file in the profile. */
+export function customActionsFile(home = homedir()) {
+  return join(home, '.dsh', 'chat-link-actions', 'custom-actions.json')
+}
+
+/** POSIX single quotes survive every shell; Windows gets double quotes. */
+export function quoteArgument(value, platform = process.platform) {
+  const text = String(value ?? '')
+  if (platform === 'win32') return `"${text.replace(/"/gu, '""')}"`
+  return `'${text.replace(/'/gu, `'\\''`)}'`
+}
+
+/** One user entry names the command it runs; never more than these limits. */
+const CUSTOM_LIMITS = { entries: 20, label: 40, command: 400 }
+
+/** Reject anything that is not a small list of `{ label, command }` pairs. */
+export function sanitizeCustomActions(value) {
+  const list = Array.isArray(value) ? value : []
+  if (list.length > CUSTOM_LIMITS.entries) throw new Error('too-many-entries')
+  const kept = []
+  for (const entry of list) {
+    const label = String(entry?.label ?? '').trim()
+    const command = String(entry?.command ?? '').trim()
+    if (label === '' || command === '') continue
+    if (label.length > CUSTOM_LIMITS.label) throw new Error('label-too-long')
+    if (command.length > CUSTOM_LIMITS.command) throw new Error('command-too-long')
+    if (/[\u0000-\u001f]/u.test(label + command)) throw new Error('control-character')
+    kept.push({ label, command })
+  }
+  return kept
+}
+
+/** Fill the placeholders the user may put in a command. */
+export function customCommand(template, target = {}, platform = process.platform) {
+  const path = String(target.path ?? '')
+  const values = {
+    path: quoteArgument(path, platform),
+    dir: quoteArgument(dirname(path), platform),
+    name: quoteArgument(path === '' ? '' : (path.split(/[\\/]/u).pop() ?? ''), platform),
+    url: quoteArgument(target.url ?? '', platform),
+  }
+  return String(template ?? '').replace(/\{(path|dir|name|url)\}/gu, (match, key) => values[key] ?? match)
+}
+
+/** Read one JSON body; the route only ever accepts small payloads. */
+async function readJsonBody(req, limit = 64 * 1024) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > limit) throw new Error('body-too-large')
+    chunks.push(chunk)
+  }
+  if (size === 0) return {}
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+}
+
+async function loadCustomActions(file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    return sanitizeCustomActions(JSON.parse(text))
+  } catch {
+    return []
+  }
+}
+
+async function saveCustomActions(file, actions) {
+  await mkdir(dirname(file), { recursive: true })
+  const temporary = `${file}.${process.pid}.tmp`
+  await writeFile(temporary, `${JSON.stringify(actions, null, 2)}\n`, 'utf8')
+  await rename(temporary, file)
+}
+
 export function optionalMember(ctx, name) {
   try {
     const direct = ctx[name]
@@ -286,6 +361,7 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
+  trace('host 0.3.4 ready')
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
     try {
@@ -328,6 +404,28 @@ export function apply(ctx) {
         const action = url.searchParams.get('action')
         if (action === 'trace') {
           trace(`client ${String(url.searchParams.get('note') ?? '').slice(0, 400)}`)
+          return reply(res, 200, { ok: true })
+        }
+        if (action === 'actions-get') {
+          return reply(res, 200, { ok: true, actions: await loadCustomActions(customActionsFile()) })
+        }
+        if (action === 'actions-save') {
+          const body = await readJsonBody(req)
+          const saved = sanitizeCustomActions(body?.actions)
+          await saveCustomActions(customActionsFile(), saved)
+          trace(`actions-saved ${saved.length}`)
+          return reply(res, 200, { ok: true, actions: saved })
+        }
+        if (action === 'actions-run') {
+          const body = await readJsonBody(req)
+          const label = String(body?.label ?? '')
+          const actions = await loadCustomActions(customActionsFile())
+          const chosen = actions.find((entry) => entry.label === label)
+          if (chosen === undefined) return reply(res, 404, { ok: false, error: 'not-configured' })
+          const command = customCommand(chosen.command, { path: body?.path, url: body?.url })
+          const child = spawn(command, { shell: true, detached: true, stdio: 'ignore', windowsHide: false })
+          child.unref()
+          trace(`action-ran ${chosen.label}`)
           return reply(res, 200, { ok: true })
         }
         if (action !== 'reveal') {
