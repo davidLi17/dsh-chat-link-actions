@@ -3,10 +3,10 @@
 菜单里的每条入口都是一行 JSON。人和 agent 写同一个文件，写完立即生效，不用重启。
 
 ```json
-{ "version": 1, "actions": [ { "label": "发送到微信", "kind": "service", "value": "发送到微信" } ] }
+[ { "label": "发送到微信", "kind": "service", "value": "发送到微信" } ]
 ```
 
-文件：`~/.dsh/chat-link-actions/actions.json`
+文件：`~/.dsh/chat-link-actions/custom-actions.json`（裸数组，不是 `{version, actions}`）
 上限：20 条；`label` 40 字；`value` 400 字。
 
 ## 入口类型
@@ -19,8 +19,10 @@
 | `shortcut` | 快捷指令名称 | 用文件当输入跑一遍快捷指令（macOS） |
 | `url` | 带占位符的链接，例如 `mi://send?p={path}` | 替换占位符并编码后打开链接，交给注册了该协议的 App |
 | `shell` | 命令行模板，例如 `scp {path} phone:/tmp/` | 跑这条命令 |
+| `powershell` | PowerShell 脚本，例如 `Get-Item -LiteralPath {path}` | 用 Windows PowerShell 5.1 跑（`-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`） |
+| `pwsh` | 同一份 PowerShell 脚本 | 用 PowerShell 7+ 跑，参数同上 |
 
-占位符：`{path}` 文件绝对路径、`{dir}` 所在目录、`{name}` 文件名、`{url}` 引用链接。`shell` 里会被正确加引号，`url` 里会被百分号编码。
+占位符：`{path}` 文件绝对路径、`{dir}` 所在目录、`{name}` 文件名、`{url}` 引用链接。`shell` 里会被正确加引号，`powershell` / `pwsh` 里会变成单引号字面量（`$` 不展开，脚本里不用再加引号），`url` 里会被百分号编码。
 
 ## 先看本机有什么
 

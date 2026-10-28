@@ -282,7 +282,7 @@ const CUSTOM_LIMITS = { entries: 20, label: 40, value: 400 }
  * every installed share extension appears（微信、小米互联服务、隔空投送）;
  * `service` 直接点名其中一个分享服务，不弹面板就把它交出去。
  */
-export const CUSTOM_KINDS = ['shell', 'app', 'shortcut', 'url', 'share', 'service']
+export const CUSTOM_KINDS = ['shell', 'powershell', 'pwsh', 'app', 'shortcut', 'url', 'share', 'service']
 
 /**
  * Reject anything that is not a small list of known kinds with a short value.
@@ -313,11 +313,39 @@ export function customCommand(template, target = {}, platform = process.platform
   const path = String(target.path ?? '')
   const values = {
     path: quoteArgument(path, platform),
-    dir: quoteArgument(dirname(path), platform),
+    dir: quoteArgument(path === '' ? '' : directoryOf(path, platform), platform),
     name: quoteArgument(path === '' ? '' : (path.split(/[\\/]/u).pop() ?? ''), platform),
     url: quoteArgument(target.url ?? '', platform),
   }
   return String(template ?? '').replace(/\{(path|dir|name|url)\}/gu, (match, key) => values[key] ?? match)
+}
+
+/** PowerShell 单引号字符串：里面的 $ 不展开，单引号写成两个。 */
+export function powershellLiteral(value) {
+  return `'${String(value ?? '').replace(/'/gu, "''")}'`
+}
+
+/** 填好占位符的 PowerShell 脚本，占位符一律成为字面量字符串。 */
+export function powershellScript(template, target = {}, platform = process.platform) {
+  const path = String(target.path ?? '')
+  const values = {
+    path: powershellLiteral(path),
+    dir: powershellLiteral(path === '' ? '' : directoryOf(path, platform)),
+    name: powershellLiteral(path === '' ? '' : (path.split(/[\\/]/u).pop() ?? '')),
+    url: powershellLiteral(String(target.url ?? '')),
+  }
+  return String(template ?? '').replace(/\{(path|dir|name|url)\}/gu, (match, key) => values[key] ?? match)
+}
+
+/**
+ * `powershell` 走 Windows PowerShell 5.1，`pwsh` 走 PowerShell 7+；两者的
+ * 差别只在可执行文件，脚本本身用同一套单引号字面量。macOS 上装了 pwsh
+ * 也能跑同一份脚本，方便在本机先把场景验完再上 Windows。
+ */
+export function powershellCommand(entry, target = {}, platform = process.platform) {
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', powershellScript(entry.value, target, platform)]
+  if (entry.kind === 'pwsh') return { executable: platform === 'win32' ? 'pwsh.exe' : 'pwsh', args }
+  return { executable: platform === 'win32' ? 'powershell.exe' : 'powershell', args }
 }
 
 /** 同样的占位符，但不做 shell 引用：填进链接里要保留成一个整体。 */
@@ -753,6 +781,12 @@ export async function runCustomAction(entry, target = {}) {
     if (where === '') throw new Error('app-needs-file')
     if (platform === 'win32') spawn(`start "" ${quoteArgument(entry.value, 'win32')} ${quoteArgument(where, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
     else spawn('open', ['-a', entry.value, where], { detached: true, stdio: 'ignore' }).unref()
+    return
+  }
+  if (entry.kind === 'powershell' || entry.kind === 'pwsh') {
+    if (path === '' && /\{path\}|\{dir\}|\{name\}/u.test(entry.value)) throw new Error('powershell-needs-file')
+    const { executable, args } = powershellCommand(entry, target, platform)
+    spawn(executable, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref()
     return
   }
   const command = customCommand(entry.value, target)

@@ -1,0 +1,27 @@
+name: windows-node
+
+# 常开的 Windows 节点：自托管 runner 用同一套脚本跑 5.1 与 7 两版 PowerShell。
+# 节点只需要装 Node 20 与 Git，runner 注册见 README「Windows 节点」一节。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node version
+        run: node -v
+      - name: Unit tests
+        shell: pwsh
+        run: npm test
+      - name: Windows PowerShell 5.1
+        shell: powershell
+        run: node test/windows-shell.test.mjs
+      - name: PowerShell 7
+        shell: pwsh
+        run: node test/windows-shell.test.mjs

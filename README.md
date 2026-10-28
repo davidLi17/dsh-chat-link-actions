@@ -24,7 +24,7 @@
 
 写「系统分享」就是弹同一个系统选择框，只是换个叫法好认；写「命令」「打开方式」「快捷指令」「链接」就直接执行那件事。编辑器里也列出本机能用的一键项（发送到…、已装的 App、快捷指令），点一下就是一行，不用自己敲。
 
-清单存在 `~/.dsh/chat-link-actions/actions.json`，也可以用命令行让 agent 配：
+清单存在 `~/.dsh/chat-link-actions/custom-actions.json`，也可以用命令行让 agent 配：
 
 ```sh
 dsh-chat-link-actions add --label 发到微信 --kind share
@@ -32,7 +32,32 @@ dsh-chat-link-actions list
 dsh-chat-link-actions protocol   # 全部类型、占位符、HTTP 路由
 ```
 
+脚本类的入口分两种：`shell` 走默认 shell，`powershell` / `pwsh` 走 PowerShell 5.1 / 7+。占位符在 PowerShell 里是单引号字面量，含 `$`、空格、中文、逗号的路径都不需要自己转义。
+
 协议细节见 [PROTOCOL.md](PROTOCOL.md)。
+
+## Windows 节点与 CI
+
+Windows 上的行为靠一台常开的 Windows 机器验，本机不用再备第二台开发机。
+
+- **CI 两头都跑**：`ci.yml` 在 `ubuntu-latest` / `macos-latest` / `windows-2022` 上跑同一套测试，Windows 上另有 5.1 与 7 两遍 PowerShell 场景；`windows-node.yml` 用自托管 runner（标签 `self-hosted, Windows, X64`）在你自己的节点上跑同一套。
+- **本机直连节点**：把连接信息写进 `~/.dsh/windows-node.json`（不进仓库），然后 `npm run win:info` 或 `npm run win:test` 就在节点上跑；`npm run win:pwsh -- 'Get-Item -LiteralPath {path}'` 临时试一段脚本。
+
+```json
+{ "host": "节点地址", "user": "登录名", "port": 22, "identityFile": "/Users/you/.ssh/id_ed25519", "workdir": "C:\\dev\\dsh-chat-link-actions" }
+```
+
+自托管 runner 注册（在节点上以管理员 PowerShell 执行，token 从仓库 Settings → Actions → Runners 取）：
+
+```powershell
+mkdir C:\actions-runner; cd C:\actions-runner
+Invoke-WebRequest -Uri https://github.com/actions/runner/releases/latest/download/actions-runner-win-x64.zip -OutFile runner.zip
+Expand-Archive runner.zip -DestinationPath .
+.\config.cmd --url https://github.com/regrevia/dsh-chat-link-actions --token <TOKEN> --labels windows-node --unattended
+.\run.cmd   # 或用 .\svc.cmd install 装成服务
+```
+
+SSH 只能验命令行；菜单、资源管理器定位、原生气泡这些要在 RDP 的桌面会话里看，别拿 SSH 退出码当窗口证据。
 
 ## 认哪些链接
 

@@ -333,7 +333,7 @@ test('自定义入口：模板替换按平台引用路径', () => {
 })
 
 test('自定义入口：类型决定怎么把文件交出去', () => {
-  assert.deepEqual(CUSTOM_KINDS, ['shell', 'app', 'shortcut', 'url', 'share', 'service'])
+  assert.deepEqual(CUSTOM_KINDS, ['shell', 'powershell', 'pwsh', 'app', 'shortcut', 'url', 'share', 'service'])
   assert.deepEqual(
     sanitizeCustomActions([
       { label: ' 发送到微信 ', kind: 'share' },

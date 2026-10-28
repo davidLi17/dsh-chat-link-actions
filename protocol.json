@@ -19,25 +19,34 @@
   ],
   "kinds": [
     {
-      "kind": "service",
-      "platform": "darwin",
-      "value": "原生分享服务的标题，例如 发送到微信",
-      "effect": "把文件直接交给那个 App 的分享扩展，不弹面板",
+      "kind": "shell",
+      "value": "命令行模板，占位符会被正确加引号",
+      "effect": "跑这条命令，自己决定发去哪",
       "example": {
-        "label": "发送到微信",
-        "kind": "service",
-        "value": "发送到微信"
+        "label": "传到服务器",
+        "kind": "shell",
+        "value": "scp {path} phone:/tmp/"
       }
     },
     {
-      "kind": "share",
-      "platform": "darwin",
-      "value": "",
-      "effect": "弹出系统分享面板，让用户在面板里选目标",
+      "kind": "powershell",
+      "value": "PowerShell 脚本模板，占位符会变成单引号字面量",
+      "platform": "win32",
+      "effect": "用 Windows PowerShell 5.1 跑这段脚本，不读 profile、不交互",
       "example": {
-        "label": "系统分享",
-        "kind": "share",
-        "value": ""
+        "label": "导出到桌面",
+        "kind": "powershell",
+        "value": "Copy-Item -LiteralPath {path} -Destination \"$env:USERPROFILE\\Desktop\""
+      }
+    },
+    {
+      "kind": "pwsh",
+      "value": "PowerShell 脚本模板，占位符会变成单引号字面量",
+      "effect": "用 PowerShell 7+（pwsh）跑这段脚本；两者脚本写法一致，差别只在版本",
+      "example": {
+        "label": "列出目录",
+        "kind": "pwsh",
+        "value": "Get-ChildItem -LiteralPath {dir}"
       }
     },
     {
@@ -72,13 +81,25 @@
       }
     },
     {
-      "kind": "shell",
-      "value": "命令行模板，占位符会被正确加引号",
-      "effect": "跑这条命令，自己决定发去哪",
+      "kind": "share",
+      "platform": "darwin",
+      "value": "",
+      "effect": "弹出系统分享面板，让用户在面板里选目标",
       "example": {
-        "label": "传到服务器",
-        "kind": "shell",
-        "value": "scp {path} phone:/tmp/"
+        "label": "系统分享",
+        "kind": "share",
+        "value": ""
+      }
+    },
+    {
+      "kind": "service",
+      "platform": "darwin",
+      "value": "原生分享服务的标题，例如 发送到微信",
+      "effect": "把文件直接交给那个 App 的分享扩展，不弹面板",
+      "example": {
+        "label": "发送到微信",
+        "kind": "service",
+        "value": "发送到微信"
       }
     }
   ],

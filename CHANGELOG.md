@@ -1,3 +1,9 @@
+## 0.6.0
+
+- 新增 `powershell` 与 `pwsh` 两种入口：脚本分别交给 Windows PowerShell 5.1 和 PowerShell 7+，占位符变成单引号字面量，含 `$`、空格、中文、逗号的路径不用自己转义。
+- 修 `{dir}` 在 Windows 路径上算错目录（之前拿到 `.`），Windows 与 `shell` 两条路径一起修。
+- CI 扩到 `windows-2022`，Windows 上分别用 5.1 与 7 跑同一套 PowerShell 场景；新增自托管 runner 工作流与 `npm run win:*` 本机直连脚本。
+
 ## 0.5.9
 
 - 自定义入口的编辑界面只留一句说明和一个输入框，不再铺一墙按钮。
