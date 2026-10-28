@@ -665,6 +665,86 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /**
+     * 对话里的附件卡片：视频/文件被收成一张卡时，DOM 里只有文件名，
+     * 既没有 href 也没有地址。先认卡片上的名字，再回同一条消息正文里找同名绝对路径。
+     */
+    var CARD_CLASS = /(?:file|media|attachment)[-_]?card|card[-_]?(?:file|media|attachment)/i;
+
+    function attachmentCard(node) {
+      for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        var className = el.className;
+        if (typeof className === "string" && CARD_CLASS.test(className)) return el;
+      }
+      return null;
+    }
+
+    function plainLabel(value) {
+      if (typeof value !== "string") return null;
+      var text = value.replace(/^[\s"'@]+/u, "").replace(/["'\s]+$/u, "");
+      return text === "" ? null : text;
+    }
+
+    function baseNameOf(value) {
+      var text = String(value).replace(/[\\/]+$/u, "");
+      var cut = Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\"));
+      return cut === -1 ? text : text.slice(cut + 1);
+    }
+
+    /** 卡片上写的文件名：title 优先，其次名称那一行的文字。 */
+    function cardFileName(card) {
+      var title = plainLabel(card.getAttribute("title"));
+      if (title !== null) return title;
+      var children = card.children || [];
+      for (var i = 0; i < children.length; i += 1) {
+        var child = children[i];
+        if (child === null || child === undefined || child.nodeType !== 1) continue;
+        if (!/name|title|caption|label/i.test(String(child.className || ""))) continue;
+        var label = plainLabel(child.textContent);
+        if (label !== null) return label;
+      }
+      return plainLabel(card.textContent);
+    }
+
+    /** 同一条消息里文件名对得上的绝对路径；对不上就返回 null，不猜。 */
+    function pathForCardName(card, name) {
+      if (name === null || name === undefined) return null;
+      var wanted = String(name).toLowerCase();
+      var scope = card;
+      for (var depth = 0; depth < 8 && scope !== null && scope !== undefined && scope !== document.body; depth += 1) {
+        if (typeof scope.querySelectorAll === "function") {
+          var links = null;
+          try { links = scope.querySelectorAll("a[href]"); } catch (ignored) { links = null; }
+          if (links !== null) {
+            var fromLink = null;
+            for (var link = 0; link < links.length && link < 200; link += 1) {
+              var linkPath = null;
+              try { linkPath = pathFromNode(links[link], null); } catch (ignored) { linkPath = null; }
+              if (linkPath !== null && baseNameOf(linkPath).toLowerCase() === wanted) fromLink = linkPath;
+            }
+            if (fromLink !== null) return fromLink;
+          }
+        }
+        var text = typeof scope.textContent === "string" ? scope.textContent : "";
+        if (text !== "" && text.length <= 20000) {
+          var matcher = new RegExp(PATH_IN_TEXT.source, "gu");
+          var hit = null;
+          var found = null;
+          while ((hit = matcher.exec(text)) !== null) {
+            var captured = hit[1] === undefined ? hit[0] : hit[1];
+            var joined = joinPathWords(captured, text.slice(hit.index + hit[0].length));
+            var candidate = normalizeCandidate(joined.replace(/[)\]}>、。；：！？,;"'“”‘’]+$/u, ""), false);
+            if (candidate !== null && baseNameOf(candidate).toLowerCase() === wanted) found = candidate;
+            if (hit[0].length === 0) matcher.lastIndex += 1;
+          }
+          if (found !== null) return found;
+        }
+        scope = scope.parentElement;
+      }
+      return null;
+    }
+
     /** 图片进剪贴板：粘贴出来就是图片，不再是那串文件名。 */
     function copyImage(source) {
       var request = typeof fetch === "function" ? fetch(source, { credentials: "include" }) : Promise.reject(new Error("no fetch"));
@@ -789,6 +869,8 @@ window.__ModuleLoader__.load({
         imageCaption: "图片",
         copyLink: "复制链接",  // ui-copy-ignore
         copiedLink: "已复制链接",  // ui-copy-ignore
+        copyName: "复制文件名",  // ui-copy-ignore
+        copiedName: "已复制文件名",  // ui-copy-ignore
         customize: "自定义入口…",  // ui-copy-ignore
         share: "发送到…",  // ui-copy-ignore
         shareFailed: "这台机器打不开系统分享",  // ui-copy-ignore
@@ -818,6 +900,8 @@ window.__ModuleLoader__.load({
         imageCaption: "Image",
         copyLink: "Copy link",  // ui-copy-ignore
         copiedLink: "Link copied",  // ui-copy-ignore
+        copyName: "Copy file name",  // ui-copy-ignore
+        copiedName: "File name copied",  // ui-copy-ignore
         customize: "Customize actions…",  // ui-copy-ignore
         share: "Send to…",  // ui-copy-ignore
         shareFailed: "System share is unavailable here",  // ui-copy-ignore
@@ -1244,6 +1328,7 @@ window.__ModuleLoader__.load({
       var image = settings.image === undefined || settings.image === null ? null : String(settings.image);
       var url = settings.url === undefined || settings.url === null ? null : String(settings.url);
       var hasPath = path !== null && path !== undefined;
+      var cardName = settings.name === undefined || settings.name === null ? null : String(settings.name);
       var items = [];
       if (image !== null) {
         items.push({ id: "copyImage", label: strings().copyImage, icon: "image", run: function () {
@@ -1279,6 +1364,15 @@ window.__ModuleLoader__.load({
         });
       }
       if (hasPath) items = items.concat(pathItems);
+      else if (cardName !== null) {
+        items.push({ id: "copyName", label: strings().copyName, icon: "copy", run: function () {
+          navigator.clipboard.writeText(cardName).then(function () {
+            toast(strings().copiedName);
+          }, function () {
+            toast(strings().clipboardFailed);
+          });
+        } });
+      }
       if (url !== null) {
         items.push({ id: "copyLink", label: strings().copyLink, icon: "copy", run: function () {
           navigator.clipboard.writeText(url).then(function () {
@@ -1288,12 +1382,14 @@ window.__ModuleLoader__.load({
           });
         } });
       }
-      try {
-        items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
-      } catch (ignored) {
-        /* 自定义条目读不出来时，基础菜单照常给 */
-      }
       if (hasPath || url !== null) {
+        try {
+          items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
+        } catch (ignored) {
+          /* 自定义条目读不出来时，基础菜单照常给 */
+        }
+      }
+      if (hasPath || url !== null || cardName !== null) {
         items.push({ id: "customize", label: strings().customize, icon: "custom", run: function () {
           openActionsEditor();
         } });
@@ -1608,14 +1704,33 @@ window.__ModuleLoader__.load({
         var url = imageUrl === null ? linkTarget(target) : outerLinkHref(target);
         proseCandidate = false;
         var path = null;
+        var cardName = null;
         if (image === null) {
           path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
         } else {
           path = imageFilePath(image);
           if (path === null) path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: false, strict: true });
         }
+        if (path === null && image === null) {
+          var card = null;
+          try { card = attachmentCard(target); } catch (ignored) { card = null; }
+          if (card !== null) {
+            var cardLabel = null;
+            try { cardLabel = cardFileName(card); } catch (ignored) { cardLabel = null; }
+            if (cardLabel !== null) {
+              if (looksAbsolute(cardLabel)) {
+                path = cardLabel;
+              } else {
+                var matched = null;
+                try { matched = pathForCardName(card, baseNameOf(cardLabel)); } catch (ignored) { matched = null; }
+                if (matched !== null) path = matched;
+                else cardName = cardLabel;
+              }
+            }
+          }
+        }
         report("ctx " + probeTag + " path=" + (path === null ? "null" : String(path).slice(0, 140)) + " img=" + (imageUrl === null ? "null" : String(imageUrl).slice(0, 100)) + " url=" + (url === null ? "null" : String(url).slice(0, 100)));
-        if (path === null && imageUrl === null && url === null) return;
+        if (path === null && imageUrl === null && url === null && cardName === null) return;
         if (path !== null && proseCandidate && !looksLikePath(path)) return;
         var options = {};
         options.inField = inField;
@@ -1623,6 +1738,7 @@ window.__ModuleLoader__.load({
         try { options.sessionId = sessionOfNode(target); } catch (ignored) { options.sessionId = activeSession; }
         options.image = imageUrl;
         options.url = url;
+        options.name = cardName;
         openMenu(path, event.clientX, event.clientY, options);
         event.preventDefault();
         event.stopPropagation();
@@ -1651,7 +1767,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.6");
+      report("ready 0.6.7");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -1706,6 +1822,10 @@ window.__ModuleLoader__.load({
     testSeams.referenceText = referenceText;
     testSeams.linkTarget = linkTarget;
     testSeams.outerLinkHref = outerLinkHref;
+    testSeams.attachmentCard = attachmentCard;
+    testSeams.cardFileName = cardFileName;
+    testSeams.pathForCardName = pathForCardName;
+    testSeams.baseNameOf = baseNameOf;
     module.exports = {};
     module.exports.inject = inject;
     module.exports.apply = apply;

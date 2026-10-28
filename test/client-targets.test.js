@@ -307,3 +307,63 @@ test('图片外层链接：只认 <a href>，图片地址不冒充链接', () =>
   nest(lone, body)
   assert.equal(paths.outerLinkHref(lone), null)
 })
+
+/* ── 附件卡片（视频/文件收成一张卡） ─────────────────────────────────── */
+
+/** 卡片：host 只把文件名写在 title 上，没有 href，也没有地址。 */
+function cardNode(name, extra = {}) {
+  const meta = fakeNode('span', {}, { className: 'x_fileMeta', textContent: 'MP4 12.4 MB' })
+  const label = fakeNode('span', {}, { className: 'x_fileName', textContent: name })
+  return fakeNode('span', extra.attrs ?? { title: name }, {
+    className: 'x_fileCard',
+    children: [label, meta],
+    textContent: name + 'MP4 12.4 MB',
+    ...extra
+  })
+}
+
+test('附件卡片：文件名从 title 或名称行取，卡片本身能被认出来', () => {
+  const card = cardNode('录屏 2026-02-11.mp4')
+  assert.equal(paths.cardFileName(card), '录屏 2026-02-11.mp4')
+  const inner = nest(fakeNode('span', {}, { className: 'x_fileIcon' }), card)
+  assert.equal(paths.attachmentCard(inner), card)
+  assert.equal(paths.cardFileName(fakeNode('span', {}, { className: 'x_fileCard', children: [fakeNode('span', {}, { className: 'x_fileName', textContent: 'b.mov' })] })), 'b.mov')
+  assert.equal(paths.baseNameOf('/Users/example/a/b.mp4'), 'b.mp4')
+  assert.equal(paths.baseNameOf('C:\\work\\b.mp4'), 'b.mp4')
+})
+
+test('附件卡片：同一条消息里的同名绝对路径就是这张卡片', () => {
+  const message = fakeNode('div', {}, { textContent: '视频做好了 [录屏 2026-02-11.mp4](/Users/example/videos/录屏 2026-02-11.mp4)' })
+  const card = cardNode('录屏 2026-02-11.mp4')
+  nest(card, message); nest(message, body)
+  assert.equal(paths.pathForCardName(card, '录屏 2026-02-11.mp4'), '/Users/example/videos/录屏 2026-02-11.mp4')
+})
+
+test('附件卡片：文件名对不上就不猜；同名出现两次取最近一条', () => {
+  const other = fakeNode('div', {}, { textContent: '另一次 [别的.mp4](/Users/example/videos/别的.mp4)' })
+  const card = cardNode('录屏.mp4')
+  nest(card, other); nest(other, body)
+  assert.equal(paths.pathForCardName(card, '录屏.mp4'), null)
+
+  const twice = fakeNode('div', {}, { textContent: '/tmp/旧/录屏.mp4 之后 /Users/example/新/录屏.mp4' })
+  const twiceCard = cardNode('录屏.mp4')
+  nest(twiceCard, twice); nest(twice, body)
+  assert.equal(paths.pathForCardName(twiceCard, '录屏.mp4'), '/Users/example/新/录屏.mp4')
+})
+
+test('附件卡片：Windows 盘符上的同名文件也能对上', () => {
+  const message = fakeNode('div', {}, { textContent: 'C:\\work\\videos\\clip.mp4' })
+  const card = cardNode('clip.mp4')
+  nest(card, message); nest(message, body)
+  assert.equal(paths.pathForCardName(card, 'clip.mp4'), 'C:\\work\\videos\\clip.mp4')
+})
+
+test('附件卡片：同一条消息里的同名链接也算（链接文字只有文件名时靠 href）', () => {
+  const message = fakeNode('div', {})
+  const anchor = fakeNode('a', { href: 'file:///Users/example/videos/%E5%BD%95%E5%B1%8F.mp4' })
+  nest(anchor, message)
+  message.querySelectorAll = (selector) => (selector === 'a[href]' ? [anchor] : [])
+  const card = cardNode('录屏.mp4')
+  nest(card, message); nest(message, body)
+  assert.equal(paths.pathForCardName(card, '录屏.mp4'), '/Users/example/videos/录屏.mp4')
+})
