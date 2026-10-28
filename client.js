@@ -758,7 +758,8 @@ window.__ModuleLoader__.load({
       reveal: ["M2 5.7A1.6 1.6 0 0 1 3.6 4.1h2.2l1.2 1.5h4.6A1.6 1.6 0 0 1 13.2 7.2v4.6A1.6 1.6 0 0 1 11.6 13.4h-8A1.6 1.6 0 0 1 2 11.8V5.7Z"],
       image: ["M2.4 3.6h11.2v8.8H2.4z", "M2.4 10.6l3.2-3 2.6 2.4 2.2-2 3.2 3"],
       custom: ["M8 2.6v10.8M2.6 8h10.8"],
-      copy: ["M5.6 5.6h6.8v6.8H5.6z", "M10.4 5.6V4.2A1.6 1.6 0 0 0 8.8 2.6H4.2A1.6 1.6 0 0 0 2.6 4.2v4.6A1.6 1.6 0 0 0 4.2 10.4h1.4"]
+      copy: ["M5.6 5.6h6.8v6.8H5.6z", "M10.4 5.6V4.2A1.6 1.6 0 0 0 8.8 2.6H4.2A1.6 1.6 0 0 0 2.6 4.2v4.6A1.6 1.6 0 0 0 4.2 10.4h1.4"],
+      share: ["M8 2.4v7.2", "M5.2 5.2 8 2.4l2.8 2.8", "M3.9 7.6H2.6v6h10.8v-6h-1.3"]
     };
 
     function icon(name) {
@@ -768,7 +769,7 @@ window.__ModuleLoader__.load({
       svg.setAttribute("viewBox", "0 0 16 16");
       svg.setAttribute("fill", "none");
       svg.setAttribute("aria-hidden", "true");
-      var paths = ICONS[name];
+      var paths = ICONS[name] || [];
       for (var i = 0; i < paths.length; i += 1) {
         var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("d", paths[i]);
@@ -1545,7 +1546,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.5.5");
+      report("ready 0.5.6");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

@@ -139,3 +139,12 @@ test('站内相对链接补成可复制的绝对地址', () => {
   assert.equal(paths.linkTarget(new ElementStub('A', { href: 'mailto:a@b.c' })), null)
   assert.equal(paths.linkTarget(new ElementStub('VIDEO', { src: '/media/v.mp4' })), 'http://127.0.0.1:50937/media/v.mp4')
 })
+
+test("菜单里用到的图标都画得出来", async () => {
+  const source = await readFile(new URL("../client.js", import.meta.url), "utf8");
+  const icons = /var ICONS = \{([\s\S]*?)\n    \};/.exec(source)[1];
+  const known = new Set([...icons.matchAll(/^\s{6}([a-zA-Z]+):/gmu)].map((row) => row[1]));
+  const used = [...source.matchAll(/icon:\s*"([a-zA-Z]+)"/gu)].map((row) => row[1]);
+  const missing = used.filter((name) => !known.has(name));
+  assert.deepEqual(missing, []);
+});

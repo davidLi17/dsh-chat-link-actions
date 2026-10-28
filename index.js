@@ -670,7 +670,7 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.5.5')
+  trace('mounted 0.5.6')
   void ensureShareHelper().catch(() => {})
   const fence = (req) => ctx.connection.requestRejection(req) === undefined
   const warn = (message) => {
