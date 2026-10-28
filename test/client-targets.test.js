@@ -285,3 +285,25 @@ test('随机脏属性：不抛错，认出来的也一定是绝对路径', () =>
     paths.srcsetPath(target)
   }
 })
+
+test('图片：没有明确磁盘来源时，不把页面地址当成本机路径', () => {
+  const plain = chain('img', { src: '/attachments/abc.png' })
+  assert.equal(paths.pathFromNode(plain, null), '/attachments/abc.png')
+  assert.equal(paths.pathFromNode(plain, { strict: true }), null)
+  const explicit = chain('img', { src: '/attachments/abc.png', 'data-file': '{"path":"/Users/example/abc.png"}' })
+  assert.equal(paths.pathFromNode(explicit, { strict: true }), '/Users/example/abc.png')
+  const linked = chain('img', { src: '/attachments/abc.png', href: '?path=%2FUsers%2Fexample%2Fabc.png' })
+  assert.equal(paths.pathFromNode(linked, { strict: true }), '/Users/example/abc.png')
+  assert.equal(paths.pathFromNode(linked, { strict: true, allowProse: false }), '/Users/example/abc.png')
+})
+
+test('图片外层链接：只认 <a href>，图片地址不冒充链接', () => {
+  const body = fakeNode('body')
+  const anchor = fakeNode('a', { href: '/files/report.pdf?x=1' })
+  const img = fakeNode('img', { src: '/attachments/abc.png' })
+  nest(img, anchor); nest(anchor, body)
+  assert.equal(paths.outerLinkHref(img), origin + '/files/report.pdf?x=1')
+  const lone = fakeNode('img', { src: '/attachments/abc.png' })
+  nest(lone, body)
+  assert.equal(paths.outerLinkHref(lone), null)
+})

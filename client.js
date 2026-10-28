@@ -615,6 +615,16 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** 包着图片的那层链接（附件卡片）：只认 <a href>，不拿图片地址冒充。 */
+    function outerLinkHref(node) {
+      for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
+        if (el.nodeType !== 1) continue;
+        var href = absoluteUrl(el.getAttribute("href"));
+        if (href !== null) return href;
+      }
+      return null;
+    }
+
     function imageTarget(node) {
       for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
         if (el.nodeType !== 1) continue;
@@ -700,8 +710,8 @@ window.__ModuleLoader__.load({
       }
       var fromFiber = pathFromFiber(start);
       if (fromFiber !== null) return fromFiber;
-      if (routePath !== null) return routePath;
-      if (point !== null && point !== undefined && point.allowProse !== false) {
+      if (routePath !== null && !(point !== null && point !== undefined && point.strict === true)) return routePath;
+      if (point !== null && point !== undefined && point.allowProse !== false && point.strict !== true) {
         var fromCaret = pathFromCaret(point.x, point.y);
         if (fromCaret !== null) {
           proseCandidate = true;
@@ -1595,9 +1605,15 @@ window.__ModuleLoader__.load({
         var inField = editableField(target);
         var image = imageTarget(target);
         var imageUrl = image === null ? null : imageSource(image);
-        var url = imageUrl === null ? linkTarget(target) : null;
+        var url = imageUrl === null ? linkTarget(target) : outerLinkHref(target);
         proseCandidate = false;
-        var path = image === null ? pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField }) : imageFilePath(image);
+        var path = null;
+        if (image === null) {
+          path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: !inField });
+        } else {
+          path = imageFilePath(image);
+          if (path === null) path = pathFromNode(target, { x: event.clientX, y: event.clientY, allowProse: false, strict: true });
+        }
         report("ctx " + probeTag + " path=" + (path === null ? "null" : String(path).slice(0, 140)) + " img=" + (imageUrl === null ? "null" : String(imageUrl).slice(0, 100)) + " url=" + (url === null ? "null" : String(url).slice(0, 100)));
         if (path === null && imageUrl === null && url === null) return;
         if (path !== null && proseCandidate && !looksLikePath(path)) return;
@@ -1635,7 +1651,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.5");
+      report("ready 0.6.6");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -1689,6 +1705,7 @@ window.__ModuleLoader__.load({
     testSeams.guessDirectory = guessDirectory;
     testSeams.referenceText = referenceText;
     testSeams.linkTarget = linkTarget;
+    testSeams.outerLinkHref = outerLinkHref;
     module.exports = {};
     module.exports.inject = inject;
     module.exports.apply = apply;
