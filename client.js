@@ -263,28 +263,47 @@ window.__ModuleLoader__.load({
     }
 
     /** Highest-confidence marker: the file route an inline link or image points at. */
-    function decodePathFromHref(href) {
+    /**
+     * One href → the path it names, plus how much the value itself claims to be
+     * a path. `explicit` covers `?path=`, `file:` and other named params; a
+     * same-origin page route is only a fallback, because for an attachment
+     * `/attachments/x.png` is the page address, not a file on disk.
+     */
+    function hrefPath(href) {
       if (typeof href !== "string" || href === "") return null;
+      var trimmed = href.trim();
+      if (trimmed === "" || trimmed.charAt(0) === "#") return null;
       try {
-        var url = new URL(href, document.baseURI);
+        var url = new URL(trimmed, document.baseURI);
         var fromQuery = normalizeCandidate(url.searchParams.get("path"));
-        if (fromQuery !== null) return fromQuery;
+        if (fromQuery !== null) return { path: fromQuery, explicit: true };
         for (var i = 0; i < ["file", "filepath", "abs", "target"].length; i += 1) {
           var fromNamed = normalizeCandidate(url.searchParams.get(["file", "filepath", "abs", "target"][i]));
-          if (fromNamed !== null) return fromNamed;
+          if (fromNamed !== null) return { path: fromNamed, explicit: true };
         }
         if (url.protocol === "file:") {
-          var fromFile = decodeFileUri(href);
-          return fromFile === null ? null : normalizeCandidate(fromFile);
+          var fromFile = decodeFileUri(trimmed);
+          var normalized = fromFile === null ? null : normalizeCandidate(fromFile);
+          return normalized === null ? null : { path: normalized, explicit: true };
         }
-        /* 尾斜杠说明指向目录，没有扩展名也接受。 */
-        if (url.origin === location.origin && looksAbsolute(url.pathname) && (/\.[A-Za-z0-9]{1,6}$/.test(url.pathname) || /\/$/.test(url.pathname))) {
-          return normalizeCandidate(decodeURIComponent(url.pathname));
+        /* 相对地址（`./a.md`、`docs/a.md`）与页面内锚点都不是本机文件；
+           只剩以 `/` 开头的站内地址可能是宿主画出来的本地路径。 */
+        if (trimmed.charAt(0) !== "/") return null;
+        /* 尾斜杠说明指向目录，没有扩展名也接受；`a.cjs:12:3` 先剥行号。 */
+        var served = stripLineSuffix(decodePercent(url.pathname));
+        if (url.origin === location.origin && looksAbsolute(served) && (/\.[A-Za-z0-9]{1,6}$/.test(served) || /\/$/.test(served))) {
+          var fromPathname = normalizeCandidate(served);
+          return fromPathname === null ? null : { path: fromPathname, explicit: false };
         }
       } catch (error) {
         /* not a URL shape we handle */
       }
       return null;
+    }
+
+    function decodePathFromHref(href) {
+      var found = hrefPath(href);
+      return found === null ? null : found.path;
     }
 
     /**
@@ -480,7 +499,7 @@ window.__ModuleLoader__.load({
       for (var owner = node; owner !== null && owner !== undefined && owner !== document.body; owner = owner.parentElement) {
         if (owner.nodeType !== 1) continue;
         var attr = owner.getAttribute("data-appearance") || owner.getAttribute("data-type") || owner.getAttribute("data-kind");
-        if (attr !== null) {
+        if (typeof attr === "string" && attr !== "") {
           var value = attr.toLowerCase();
           if (value === "folder" || value === "directory") return true;
           if (value === "file") return false;
@@ -500,17 +519,25 @@ window.__ModuleLoader__.load({
      * an absolute `data-*` value, then a title, then the element's own text. The
      * text pass covers paths the transcript renders as plain prose.
      */
-    /** `srcset` 里第一条绝对路径（图片芯片常用多倍图）。 */
-    function srcsetPath(node) {
+    /** `srcset` 里挑一条：明确写出的磁盘位置优先，页面地址只当兜底。 */
+    function srcsetCandidate(node) {
       var value = node.getAttribute("srcset");
-      if (value === null || value === undefined || value.indexOf("/") === -1) return null;
-      var pieces = String(value).split(",");
+      if (typeof value !== "string" || value === "") return null;
+      var pieces = value.split(",");
+      var fallback = null;
       for (var i = 0; i < pieces.length; i += 1) {
         var first = pieces[i].replace(/\s+\d+(?:\.\d+)?[wx]\s*$/u, "").trim();
-        var decoded = decodePathFromHref(first);
-        if (decoded !== null) return decoded;
+        var found = hrefPath(first);
+        if (found === null) continue;
+        if (found.explicit === true) return found;
+        if (fallback === null) fallback = found;
       }
-      return null;
+      return fallback;
+    }
+
+    function srcsetPath(node) {
+      var found = srcsetCandidate(node);
+      return found === null ? null : found.path;
     }
 
     /** 右键落在图片上：图片自己就是被操作的对象。 */
@@ -524,14 +551,20 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    /** 右键落在链接上时，链接本身也是可操作对象。 */
+    /**
+     * 右键落在链接上时，链接本身也是可操作对象。外层 `href` 优先：附件卡片里
+     * 点的是预览图，真正要复制的那个地址在包着它的链接上。
+     */
     function linkTarget(node) {
       for (var el = node; el !== null && el !== undefined && el !== document.body; el = el.parentElement) {
         if (el.nodeType !== 1) continue;
         var href = absoluteUrl(el.getAttribute("href"));
         if (href !== null) return href;
-        if (el.tagName === "IMG" || el.tagName === "VIDEO" || el.tagName === "AUDIO" || el.tagName === "SOURCE") {
-          var source = absoluteUrl(el.currentSrc || el.getAttribute("src"));
+      }
+      for (var media = node; media !== null && media !== undefined && media !== document.body; media = media.parentElement) {
+        if (media.nodeType !== 1) continue;
+        if (media.tagName === "IMG" || media.tagName === "VIDEO" || media.tagName === "AUDIO" || media.tagName === "SOURCE") {
+          var source = absoluteUrl(media.currentSrc || media.getAttribute("src"));
           if (source !== null) return source;
         }
       }
@@ -594,14 +627,20 @@ window.__ModuleLoader__.load({
     }
 
     function pathFromNode(start, point) {
+      var routePath = null;
       for (var node = start; node !== null && node !== undefined && node !== document.body; node = node.parentElement) {
         if (node.nodeType !== 1) continue;
         for (var a = 0; a < PATH_ATTRS.length; a += 1) {
-          var fromHref = decodePathFromHref(node.getAttribute(PATH_ATTRS[a]));
-          if (fromHref !== null) return fromHref;
+          var found = hrefPath(node.getAttribute(PATH_ATTRS[a]));
+          if (found === null) continue;
+          if (found.explicit === true) return found.path;
+          if (routePath === null) routePath = found.path;
         }
-        var fromSrcset = srcsetPath(node);
-        if (fromSrcset !== null) return fromSrcset;
+        var fromSrcset = srcsetCandidate(node);
+        if (fromSrcset !== null) {
+          if (fromSrcset.explicit === true) return fromSrcset.path;
+          if (routePath === null) routePath = fromSrcset.path;
+        }
         var fromData = datasetPath(node);
         if (fromData !== null) return fromData;
         var fromTitle = normalizeCandidate(node.getAttribute("title"));
@@ -609,6 +648,7 @@ window.__ModuleLoader__.load({
       }
       var fromFiber = pathFromFiber(start);
       if (fromFiber !== null) return fromFiber;
+      if (routePath !== null) return routePath;
       if (point !== null && point !== undefined && point.allowProse !== false) {
         var fromCaret = pathFromCaret(point.x, point.y);
         if (fromCaret !== null) {
@@ -633,7 +673,6 @@ window.__ModuleLoader__.load({
       "border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;",
       "font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;}",
       ".dcla-editor-hint{margin:0 0 8px;font-size:12px;opacity:.66;}",
-      "border:1px solid rgba(127,127,127,.34);background:transparent;font:inherit;font-size:12px;cursor:pointer;color:inherit;}",
       ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}",
       ".dcla-editor-row button{box-sizing:border-box;padding:5px 12px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
       "background:transparent;color:inherit;font:inherit;cursor:pointer;}",
@@ -1544,7 +1583,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.5.9");
+      report("ready 0.6.3");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -1589,6 +1628,14 @@ window.__ModuleLoader__.load({
     testSeams.editableField = editableField;
     testSeams.contextMenu = onContextMenu;
     testSeams.imageTarget = imageTarget;
+    testSeams.pathFromNode = pathFromNode;
+    testSeams.datasetPath = datasetPath;
+    testSeams.srcsetPath = srcsetPath;
+    testSeams.imageFilePath = imageFilePath;
+    testSeams.pathFromProps = pathFromProps;
+    testSeams.directoryHint = directoryHint;
+    testSeams.guessDirectory = guessDirectory;
+    testSeams.referenceText = referenceText;
     testSeams.linkTarget = linkTarget;
     module.exports = {};
     module.exports.inject = inject;
