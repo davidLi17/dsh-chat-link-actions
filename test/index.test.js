@@ -375,7 +375,7 @@ test('自定义入口：配置文件在 profile 下', () => {
 })
 
 test('对外协议：一份数据说清所有入口类型和调用方式', () => {
-  assert.equal(ACTION_PROTOCOL.version, 1)
+  assert.equal(ACTION_PROTOCOL.version, 2)
   assert.deepEqual(ACTION_PROTOCOL.kinds.map((item) => item.kind).sort(), [...CUSTOM_KINDS].sort())
   for (const entry of ACTION_PROTOCOL.kinds) {
     assert.equal(typeof entry.effect, 'string')
@@ -384,4 +384,12 @@ test('对外协议：一份数据说清所有入口类型和调用方式', () =>
   }
   assert.ok(ACTION_PROTOCOL.http.routes.some((route) => route.action === 'actions-add'))
   assert.equal(ACTION_PROTOCOL.limits.entries, 20)
+})
+
+test('协议里带 agent 配置入口', () => {
+  assert.equal(typeof ACTION_PROTOCOL.agent, 'object')
+  assert.ok(ACTION_PROTOCOL.agent.fast_path.length >= 2)
+  assert.ok(ACTION_PROTOCOL.agent.recipes.length >= 3)
+  assert.equal(ACTION_PROTOCOL.storage.file.endsWith('custom-actions.json'), true)
+  assert.ok(ACTION_PROTOCOL.cli.some((line) => line.includes('apply')))
 })

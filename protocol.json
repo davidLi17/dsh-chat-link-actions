@@ -1,14 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
   "storage": {
-    "file": "~/.dsh/chat-link-actions/actions.json",
+    "file": "~/.dsh/chat-link-actions/custom-actions.json",
     "shape": "{ \"version\": 1, \"actions\": [ { \"label\": string, \"kind\": Kind, \"value\": string } ] }",
-    "note": "这个文件和菜单共用；写入即生效，不用重启。"
+    "note": "菜单与 CLI 共用这个文件。写完 5 秒内界面自己刷新，不用重启、不用刷新页面。"
   },
   "limits": {
     "entries": 20,
     "label": 40,
-    "value": 400
+    "value": 400,
+    "note": "超出上限时写入被拒绝并报错，不会截断。"
   },
   "placeholders": [
     "{path}",
@@ -131,10 +132,79 @@
   },
   "cli": [
     "node <plugin>/cli.js protocol",
-    "node <plugin>/cli.js list",
-    "node <plugin>/cli.js add --label 发送到微信 --kind service --value 发送到微信",
-    "node <plugin>/cli.js remove 发送到微信",
     "node <plugin>/cli.js detect",
-    "node <plugin>/cli.js run 发送到微信 --path /tmp/a.png"
-  ]
+    "node <plugin>/cli.js apply --json '[{\"label\":\"用 WPS 打开\",\"kind\":\"app\",\"value\":\"WPS\"}]'",
+    "node <plugin>/cli.js apply --file /tmp/menu.json --replace true",
+    "node <plugin>/cli.js validate --json '[...]'",
+    "node <plugin>/cli.js list",
+    "node <plugin>/cli.js add --label 发送到微信 --kind share --value \"\"",
+    "node <plugin>/cli.js remove 发送到微信",
+    "node <plugin>/cli.js run 用 WPS 打开 --path /tmp/a.png"
+  ],
+  "agent": {
+    "intent": "按用户的说法把入口配好：先读懂他要「用哪个 App / 发到哪 / 跑什么」，再选 kind，最后一次 apply 写入。",
+    "fast_path": [
+      "node <plugin>/cli.js detect  → 看本机有哪些 App 和快捷指令，拿现成 value",
+      "node <plugin>/cli.js apply --json '[{\"label\":\"用 WPS 打开\",\"kind\":\"app\",\"value\":\"WPS\"}]'",
+      "node <plugin>/cli.js list → 确认最终入口"
+    ],
+    "rules": [
+      "label 是用户在菜单里看到的字，写动词短语，例如「用 WPS 打开」「发送到微信」。",
+      "同名 label 视为同一条：apply 会覆盖，不会长出重复项，所以重跑是安全的。",
+      "kind 只能是 kinds 里列出的值；不认识的 kind 会被当成 shell，不要依赖这个兜底。",
+      "app 的 value 用 App 名字（WPS、Preview）或 .app 的完整路径；Windows 用 exe 路径。",
+      "share 的 value 必须是空字符串；它弹系统面板，具体发给谁由用户在面板里选。",
+      "shell 里放占位符 {path} {dir} {name} {url}，它们会被正确加引号；不要把路径硬编码。",
+      "一次配 1 到 3 条就够。菜单是给人快速点的，堆满反而难用。",
+      "写完不要叫用户重启或刷新页面；最多说「已经配好了」。"
+    ],
+    "recipes": [
+      {
+        "ask": "用 WPS 打开",
+        "entry": {
+          "label": "用 WPS 打开",
+          "kind": "app",
+          "value": "WPS"
+        }
+      },
+      {
+        "ask": "用某个 App 打开（不知道装没装）",
+        "entry": {
+          "label": "用预览打开",
+          "kind": "app",
+          "value": "Preview"
+        }
+      },
+      {
+        "ask": "发送到微信 / 发给别人",
+        "entry": {
+          "label": "发送到…",
+          "kind": "share",
+          "value": ""
+        }
+      },
+      {
+        "ask": "跑一条现成命令（压缩、转格式、传服务器）",
+        "entry": {
+          "label": "转成 PNG",
+          "kind": "shell",
+          "value": "sips -s format png {path} --out {dir}/"
+        }
+      },
+      {
+        "ask": "存到手机 / 某个 App 的协议",
+        "entry": {
+          "label": "发送到手机",
+          "kind": "url",
+          "value": "mi://send?p={path}"
+        }
+      }
+    ],
+    "errors": {
+      "too-many-entries": "条目超过上限，先删几条",
+      "label-too-long": "label 超过 40 字",
+      "value-too-long": "value 超过 400 字",
+      "control-character": "label 或 value 里有不可见控制字符"
+    }
+  }
 }

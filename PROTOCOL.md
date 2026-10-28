@@ -56,3 +56,19 @@ node <plugin>/cli.js run 发送到微信 --path /tmp/a.png
 - `actions-run` body `{ label, path?, url? }`
 
 其余 action 是菜单自己的：`reveal`、`trace`。
+
+## 给 agent：一次配好
+
+`AGENTS.md` 是精简版（三条命令 + 选 kind 的对照表 + 约束）。机器可读的那份用
+`node cli.js protocol` 取，里面有 `agent.fast_path`、`agent.recipes`、`agent.rules`、`agent.errors`。
+
+```bash
+node cli.js detect                                     # 本机可用的 App、快捷指令
+node cli.js apply --json '[{"label":"用 WPS 打开","kind":"app","value":"WPS"}]'
+node cli.js validate --json '[{"label":"x","kind":"app","value":"Preview"}]'
+node cli.js list
+```
+
+- `apply` 按 `label` 合并，同名覆盖，重跑安全；`--replace true` 整份替换。
+- 写入即生效：菜单所在页面最多 5 秒自己刷新，不用重启、不用刷新页面。
+- 挑战上限（20 条 / label 40 字 / value 400 字）会直接报错，不静默截断。

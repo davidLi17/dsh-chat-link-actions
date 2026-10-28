@@ -821,7 +821,7 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.5.8')
+  trace('mounted 0.5.9')
   void ensureShareHelper().then((helper) => {
     if (helper.ok === true) warmShareHelper(shareHelperPaths())
   }).catch(() => {})
