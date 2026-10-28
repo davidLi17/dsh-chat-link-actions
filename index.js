@@ -455,6 +455,59 @@ const SHARE_PRESETS = [
   { app: 'Mail', label: '邮件' },
 ]
 
+let appCache = { at: 0, list: null }
+
+/** 装了什么 App：给「用某某打开」提供现成名字，省得记 bundle id。 */
+export async function listInstalledApps(home = homedir(), platform = process.platform) {
+  if (Date.now() - appCache.at < 120_000 && appCache.list !== null) return appCache.list
+  const found = []
+  if (platform === 'darwin') {
+    const roots = ['/Applications', join(home, 'Applications'), '/System/Applications']
+    for (const root of roots) {
+      try {
+        const names = await readdir(root)
+        for (const name of names) {
+          if (!name.endsWith('.app')) continue
+          const label = name.slice(0, -4)
+          if (label.startsWith('.') || label === '') continue
+          found.push({ label, value: join(root, name) })
+        }
+      } catch (ignored) {
+        /* 没有这个目录就不提供 */
+      }
+    }
+  } else if (platform === 'win32') {
+    const roots = [
+      join(process.env.ProgramFiles ?? 'C:\\Program Files'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'),
+      join(process.env.LOCALAPPDATA ?? '', 'Programs')
+    ]
+    for (const root of roots) {
+      try {
+        const top = await readdir(root)
+        for (const vendor of top) {
+          const vendorDir = join(root, vendor)
+          try {
+            const inside = await readdir(vendorDir)
+            for (const exe of inside) {
+              if (!exe.endsWith('.exe')) continue
+              found.push({ label: exe.slice(0, -4), value: join(vendorDir, exe) })
+            }
+          } catch (ignored) {
+            if (!vendor.endsWith('.exe')) continue
+            found.push({ label: vendor.slice(0, -4), value: vendorDir })
+          }
+        }
+      } catch (ignored) {
+        /* 没有这个目录就不提供 */
+      }
+    }
+  }
+  found.sort((left, right) => left.label.localeCompare(right.label))
+  appCache = { at: Date.now(), list: found }
+  return found
+}
+
 export async function detectTargets(home = homedir(), platform = process.platform) {
   const targets = []
   if (platform === 'darwin') {
@@ -474,6 +527,15 @@ export async function detectTargets(home = homedir(), platform = process.platfor
     for (const preset of apps) targets.push({ label: preset.label, kind: 'app', value: preset.app })
     const shortcuts = await listShortcuts()
     for (const name of shortcuts) targets.push({ label: `快捷指令：${name}`, kind: 'shortcut', value: name })
+    const installed = await listInstalledApps(home, platform)
+    const taken = new Set(targets.filter((item) => item.kind === 'app').map((item) => item.label))
+    let extra = 0
+    for (const app of installed) {
+      if (extra >= 24) break
+      if (taken.has(app.label)) continue
+      targets.push({ label: `用 ${app.label} 打开`, kind: 'app', value: app.value })
+      extra += 1
+    }
   } else if (platform === 'win32') {
     const roots = [
       join(process.env.ProgramFiles ?? 'C:\\Program Files'),
@@ -553,8 +615,17 @@ export async function listShareServices() {
 }
 
 /** Workflow names that read like 「send this somewhere」, at most a few. */
+let shortcutCache = { at: 0, list: [] }
+
 async function listShortcuts() {
   if (process.platform !== 'darwin') return []
+  if (Date.now() - shortcutCache.at < 60_000) return shortcutCache.list
+  const list = await readShortcuts()
+  shortcutCache = { at: Date.now(), list }
+  return list
+}
+
+async function readShortcuts() {
   return new Promise((resolve) => {
     const child = spawn('shortcuts', ['list'], { stdio: ['ignore', 'pipe', 'ignore'] })
     let text = ''
@@ -750,10 +821,13 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.5.7')
+  trace('mounted 0.5.8')
   void ensureShareHelper().then((helper) => {
     if (helper.ok === true) warmShareHelper(shareHelperPaths())
   }).catch(() => {})
+  /* 先算清单，编辑器点开时不用等 */
+  void listInstalledApps().catch(() => {})
+  void listShortcuts().catch(() => {})
   ctx.effect(() => () => {
     cancelSharePanel()
     const spare = warmShare

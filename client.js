@@ -695,8 +695,8 @@ window.__ModuleLoader__.load({
         share: "发送到…",  // ui-copy-ignore
         shareFailed: "这台机器打不开系统分享",  // ui-copy-ignore
         customizeTitle: "自定义入口",  // ui-copy-ignore
-        customizeHint: "一行一个：名称 | 系统分享。点开直接弹外部 App 选择框",  // ui-copy-ignore
-        customizePlaceholder: "发送到微信 | 系统分享",  // ui-copy-ignore
+        customizeHint: "一行一个。可挑下面现成的，也可自己写：名称 | 打开方式 = WPS",  // ui-copy-ignore
+        customizePlaceholder: "用 WPS 打开 | 打开方式 = WPS",  // ui-copy-ignore
         customizeDetected: "本机可用",  // ui-copy-ignore
         save: "保存",  // ui-copy-ignore
         cancel: "取消",  // ui-copy-ignore
@@ -725,7 +725,7 @@ window.__ModuleLoader__.load({
         share: "Send to…",  // ui-copy-ignore
         shareFailed: "System share is unavailable here",  // ui-copy-ignore
         customizeTitle: "Custom actions",  // ui-copy-ignore
-        customizeHint: "One per line: name | 系统分享 for the system panel, or name | 命令 = command",  // ui-copy-ignore
+        customizeHint: "One per line. Pick one below or type your own: name | 打开方式 = app",  // ui-copy-ignore
         customizeDetected: "On this Mac",  // ui-copy-ignore
         customizePlaceholder: "Send to WeChat | open -a WeChat {path}",  // ui-copy-ignore
         save: "Save",  // ui-copy-ignore
@@ -1573,7 +1573,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.5.7");
+      report("ready 0.5.8");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
