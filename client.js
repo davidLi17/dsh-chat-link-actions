@@ -807,24 +807,35 @@ window.__ModuleLoader__.load({
 
     var STYLE_ID = "dsh-chat-link-actions-style";
     var CSS_EXTRA = [
-      ".dcla-editor{position:fixed;z-index:1101;pointer-events:auto;box-sizing:border-box;padding:12px;min-width:360px;",
-      "max-width:min(520px,calc(100vw - 32px));background:var(--dsw-specific-menu,rgba(30,32,38,.96));",
+      ".dcla-editor{position:fixed;z-index:1101;pointer-events:auto;box-sizing:border-box;padding:16px;min-width:470px;",
+      "max-width:min(680px,calc(100vw - 32px));background:var(--dsw-specific-menu,rgba(30,32,38,.96));",
+      "backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
+      "-webkit-backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
       "color:var(--dsw-alias-label-primary,#f2f3f5);border-radius:var(--dsw-radius-lg,12px);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.3));",
-      "font:13px/1.5 system-ui,-apple-system,'PingFang SC',sans-serif;}",
-      ".dcla-rows{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;}",
-      ".dcla-edit-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid rgba(127,127,127,.22);",
-      "border-radius:var(--dsw-radius-md,8px);}",
-      ".dcla-field{box-sizing:border-box;min-width:0;padding:4px 6px;border-radius:var(--dsw-radius-md,8px);",
-      "border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;font:inherit;font-size:12px;}",
-      ".dcla-edit-row .dcla-name{flex:1 1 120px;}",
+      "font:var(--dsw-font-sm-14,14px)/1.6 system-ui,-apple-system,'PingFang SC',sans-serif;}",
+      ".dcla-rows{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;}",
+      ".dcla-edit-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;",
+      "border:1px solid rgba(127,127,127,.18);border-radius:var(--dsw-radius-lg,12px);}",
+      ".dcla-field{box-sizing:border-box;min-width:0;padding:6px 9px;border-radius:var(--dsw-radius-md,8px);",
+      "border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;font:inherit;",
+      "font-size:var(--dsw-font-xs-13,13px);}",
+      ".dcla-edit-row .dcla-name{flex:1 1 100%;}",
       ".dcla-edit-row .dcla-value{flex:1 1 100%;}",
-      ".dcla-edit-row .dcla-scope,.dcla-edit-row .dcla-purpose{flex:0 0 auto;}",
-      ".dcla-drop{flex:none;padding:4px 8px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
-      "background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;}",
-      ".dcla-editor-hint{margin:0 0 8px;font-size:12px;opacity:.66;}",
-      ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}",
-      ".dcla-editor-row button{box-sizing:border-box;padding:5px 12px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
-      "background:transparent;color:inherit;font:inherit;cursor:pointer;}",
+      ".dcla-pick{display:inline-flex;align-items:center;gap:6px;max-width:210px;padding:6px 10px;",
+      "border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);background:transparent;",
+      "color:inherit;font:inherit;font-size:var(--dsw-font-xs-13,13px);cursor:pointer;white-space:nowrap;overflow:hidden;}",
+      ".dcla-pick[data-open=true]{background:rgba(127,127,127,.16);}",
+      ".dcla-caret{flex:none;width:0;height:0;opacity:.55;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid currentColor;}",
+      ".dcla-drop{margin-left:auto;padding:6px 10px;border-radius:var(--dsw-radius-md,8px);border:1px solid transparent;",
+      "background:transparent;color:inherit;font:inherit;font-size:var(--dsw-font-xs-13,13px);cursor:pointer;opacity:.7;}",
+      ".dcla-drop:hover{opacity:1;background:rgba(127,127,127,.14);}",
+      ".dcla-pick-menu{z-index:1102;min-width:120px;animation:none;}",
+      ".dcla-pick-menu .dcla-check{flex:none;width:14px;opacity:0;font-size:var(--dsw-font-xxs-12,12px);}",
+      ".dcla-pick-menu .dcla-check[data-on=true]{opacity:.9;}",
+      ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}",
+      ".dcla-editor-row button{box-sizing:border-box;padding:6px 14px;border-radius:var(--dsw-radius-md,8px);",
+      "border:1px solid rgba(127,127,127,.34);background:transparent;color:inherit;font:inherit;",
+      "font-size:var(--dsw-font-xs-13,13px);cursor:pointer;}",
       ".dcla-editor-row button[data-primary=\"true\"]{background:rgba(127,127,127,.22);border-color:transparent;}",
       ".dcla-editor-row button[data-add=\"true\"]{margin-right:auto;}"
     ].join("");
@@ -883,7 +894,7 @@ window.__ModuleLoader__.load({
         share: "发送到…",  // ui-copy-ignore
         shareFailed: "这台机器打不开系统分享",  // ui-copy-ignore
         customizeTitle: "自定义入口",  // ui-copy-ignore
-        customizeHint: "通用入口所有文件都出现；限定入口只对那一类出现。",  // ui-copy-ignore
+        valueHints: { shell: "命令，{path} 代表文件", app: "App 名字或路径", url: "链接，可用 {url}", share: "", shortcut: "快捷指令名字", service: "服务名" },  // ui-copy-ignore
         scopeLabel: "适用于",  // ui-copy-ignore
         purposeLabel: "用途",  // ui-copy-ignore
         scopeWords: { all: "通用", video: "视频", audio: "音频", image: "图片", document: "文档", archive: "压缩包", code: "代码" },  // ui-copy-ignore
@@ -922,7 +933,7 @@ window.__ModuleLoader__.load({
         share: "Send to…",  // ui-copy-ignore
         shareFailed: "System share is unavailable here",  // ui-copy-ignore
         customizeTitle: "Custom actions",  // ui-copy-ignore
-        customizeHint: "An all-files action shows on every file; a limited one only on its kind.",  // ui-copy-ignore
+        valueHints: { shell: "Command; {path} is the file", app: "App name or path", url: "Link; {url} is the file URL", share: "", shortcut: "Shortcut name", service: "Service name" },  // ui-copy-ignore
         scopeLabel: "Applies to",  // ui-copy-ignore
         purposeLabel: "Purpose",  // ui-copy-ignore
         scopeWords: { all: "All files", video: "Video", audio: "Audio", image: "Image", document: "Document", archive: "Archive", code: "Code" },  // ui-copy-ignore
@@ -1283,20 +1294,96 @@ window.__ModuleLoader__.load({
 
 
     var SCOPE_ORDER = ["all", "video", "audio", "image", "document", "archive", "code"];
-    var PURPOSE_ORDER = ["shell", "app", "url", "share", "service", "shortcut"];
+    var PURPOSE_ORDER = ["app", "shell", "url", "share", "shortcut", "service"];
 
-    function editorSelect(className, label, keys, words, value) {
-      var select = document.createElement("select");
-      select.className = "dcla-field " + className;
-      select.setAttribute("aria-label", label);
-      keys.forEach(function (key) {
-        var option = document.createElement("option");
-        option.value = key;
-        option.textContent = words[key] === undefined ? key : words[key];
-        select.appendChild(option);
+    /** 下拉用菜单样式，别落到系统原生列表。 */
+    function editorPicker(className, label, keys, words, value) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "dcla-pick " + className;
+      button.setAttribute("aria-haspopup", "listbox");
+      button.setAttribute("aria-label", label);
+      var current = keys.indexOf(value) >= 0 ? value : keys[0];
+      var text = document.createElement("span");
+      var caret = document.createElement("span");
+      caret.className = "dcla-caret";
+      button.appendChild(text);
+      button.appendChild(caret);
+
+      var box = null;
+      var listening = false;
+      var closeBox = function () {
+        if (box !== null && box.parentNode !== null) box.parentNode.removeChild(box);
+        box = null;
+        button.setAttribute("data-open", "false");
+        if (listening) {
+          document.removeEventListener("pointerdown", onDocDown, true);
+          listening = false;
+        }
+      };
+      var onDocDown = function (event) {
+        if (box === null) return;
+        var target = event.target;
+        if (box.contains(target) || button.contains(target)) return;
+        closeBox();
+      };
+      var paint = function () {
+        text.textContent = words[current] === undefined ? current : words[current];
+        button.value = current;
+        button.setAttribute("aria-label", label + "：" + text.textContent);  // ui-copy-ignore
+      };
+      var choose = function (key) {
+        current = key;
+        paint();
+        closeBox();
+        if (typeof button.onChange === "function") button.onChange(key);
+      };
+      paint();
+
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (box !== null) {
+          closeBox();
+          return;
+        }
+        box = document.createElement("div");
+        box.className = "dcla-menu dcla-pick-menu";
+        box.setAttribute("role", "listbox");
+        box.setAttribute("aria-label", label);
+        keys.forEach(function (key) {
+          var item = document.createElement("button");
+          item.type = "button";
+          item.className = "dcla-item";
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", key === current ? "true" : "false");
+          var check = document.createElement("span");
+          check.className = "dcla-check";
+          check.textContent = "\u2713";
+          check.setAttribute("data-on", key === current ? "true" : "false");
+          item.appendChild(check);
+          var word = document.createElement("span");
+          word.className = "dcla-label";
+          word.textContent = words[key] === undefined ? key : words[key];
+          item.appendChild(word);
+          item.addEventListener("click", function (clickEvent) {
+            clickEvent.stopPropagation();
+            choose(key);
+            button.focus();
+          });
+          box.appendChild(item);
+        });
+        document.body.appendChild(box);
+        var rect = button.getBoundingClientRect();
+        placeMenu(box, rect.left, rect.bottom + 4);
+        button.setAttribute("data-open", "true");
+        if (!listening) {
+          document.addEventListener("pointerdown", onDocDown, true);
+          listening = true;
+        }
       });
-      select.value = keys.indexOf(value) >= 0 ? value : keys[0];
-      return select;
+      button.dismiss = closeBox;
+      return button;
     }
 
     function editorInput(className, placeholder, value) {
@@ -1322,24 +1409,30 @@ window.__ModuleLoader__.load({
       panel.setAttribute("role", "dialog");
       panel.setAttribute("aria-label", zh.customizeTitle);
 
-      var hint = document.createElement("p");
-      hint.className = "dcla-editor-hint";
-      hint.textContent = zh.customizeHint;
-
       var rows = document.createElement("div");
       rows.className = "dcla-rows";
       var boxes = [];
+      var pickers = [];
 
       var addRow = function (entry) {
         if (boxes.length >= 20) return;
         var box = document.createElement("div");
         box.className = "dcla-edit-row";
-        var scope = editorSelect("dcla-scope", zh.scopeLabel, SCOPE_ORDER, zh.scopeWords,
+        var scope = editorPicker("dcla-scope", zh.scopeLabel, SCOPE_ORDER, zh.scopeWords,
           entry === null ? (presetScope === undefined || presetScope === null ? "all" : presetScope) : entry.scope);
-        var purpose = editorSelect("dcla-purpose", zh.purposeLabel, PURPOSE_ORDER, zh.kindWords,
-          entry === null ? "shell" : entry.kind);
+        var purpose = editorPicker("dcla-purpose", zh.purposeLabel, PURPOSE_ORDER, zh.kindWords,
+          entry === null ? "app" : entry.kind);
         var name = editorInput("dcla-name", zh.namePlaceholder, entry === null ? "" : entry.label);
         var value = editorInput("dcla-value", zh.valuePlaceholder, entry === null ? "" : entry.value);
+        var syncValue = function () {
+          var word = zh.valueHints[purpose.value];
+          value.placeholder = word === undefined || word === "" ? zh.valuePlaceholder : word;
+          value.style.display = purpose.value === "share" ? "none" : "";
+        };
+        purpose.onChange = syncValue;
+        syncValue();
+        pickers.push(scope);
+        pickers.push(purpose);
         var drop = document.createElement("button");
         drop.type = "button";
         drop.className = "dcla-drop";
@@ -1351,16 +1444,17 @@ window.__ModuleLoader__.load({
         });
         box.appendChild(scope);
         box.appendChild(purpose);
+        box.appendChild(drop);
         box.appendChild(name);
         box.appendChild(value);
-        box.appendChild(drop);
         rows.appendChild(box);
         boxes.push(box);
         return box;
       };
 
       customActions.forEach(function (entry) { addRow(entry); });
-      if (presetScope !== undefined && presetScope !== null) addRow(null);
+      /* 一个入口都没有时给一行空白的，别让人对着空面板找入口。 */
+      if (boxes.length === 0 || (presetScope !== undefined && presetScope !== null)) addRow(null);
 
       var footer = document.createElement("div");
       footer.className = "dcla-editor-row";
@@ -1379,7 +1473,6 @@ window.__ModuleLoader__.load({
       footer.appendChild(cancel);
       footer.appendChild(save);
 
-      panel.appendChild(hint);
       panel.appendChild(rows);
       panel.appendChild(footer);
       layer.appendChild(panel);
@@ -1393,6 +1486,7 @@ window.__ModuleLoader__.load({
       place();
 
       var close = function () {
+        pickers.forEach(function (picker) { picker.dismiss(); });
         if (layer.parentNode !== null) layer.parentNode.removeChild(layer);
         document.removeEventListener("keydown", onKey, true);
       };
@@ -1899,7 +1993,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.8");
+      report("ready 0.6.9");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
