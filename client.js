@@ -811,14 +811,22 @@ window.__ModuleLoader__.load({
       "max-width:min(520px,calc(100vw - 32px));background:var(--dsw-specific-menu,rgba(30,32,38,.96));",
       "color:var(--dsw-alias-label-primary,#f2f3f5);border-radius:var(--dsw-radius-lg,12px);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.3));",
       "font:13px/1.5 system-ui,-apple-system,'PingFang SC',sans-serif;}",
-      ".dcla-editor textarea{box-sizing:border-box;width:100%;min-height:150px;resize:vertical;padding:8px;",
-      "border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;",
-      "font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;}",
+      ".dcla-rows{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;}",
+      ".dcla-edit-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid rgba(127,127,127,.22);",
+      "border-radius:var(--dsw-radius-md,8px);}",
+      ".dcla-field{box-sizing:border-box;min-width:0;padding:4px 6px;border-radius:var(--dsw-radius-md,8px);",
+      "border:1px solid rgba(127,127,127,.34);background:rgba(127,127,127,.10);color:inherit;font:inherit;font-size:12px;}",
+      ".dcla-edit-row .dcla-name{flex:1 1 120px;}",
+      ".dcla-edit-row .dcla-value{flex:1 1 100%;}",
+      ".dcla-edit-row .dcla-scope,.dcla-edit-row .dcla-purpose{flex:0 0 auto;}",
+      ".dcla-drop{flex:none;padding:4px 8px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
+      "background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;}",
       ".dcla-editor-hint{margin:0 0 8px;font-size:12px;opacity:.66;}",
       ".dcla-editor-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}",
       ".dcla-editor-row button{box-sizing:border-box;padding:5px 12px;border-radius:var(--dsw-radius-md,8px);border:1px solid rgba(127,127,127,.34);",
       "background:transparent;color:inherit;font:inherit;cursor:pointer;}",
-      ".dcla-editor-row button[data-primary=\"true\"]{background:rgba(127,127,127,.22);border-color:transparent;}"
+      ".dcla-editor-row button[data-primary=\"true\"]{background:rgba(127,127,127,.22);border-color:transparent;}",
+      ".dcla-editor-row button[data-add=\"true\"]{margin-right:auto;}"
     ].join("");
     var CSS = [
       ".dcla-layer{position:fixed;inset:0;z-index:1100;pointer-events:none;}",
@@ -875,8 +883,16 @@ window.__ModuleLoader__.load({
         share: "发送到…",  // ui-copy-ignore
         shareFailed: "这台机器打不开系统分享",  // ui-copy-ignore
         customizeTitle: "自定义入口",  // ui-copy-ignore
-        customizeHint: "一行一个入口。例：用 WPS 打开 | 打开方式 = WPS；发送到微信 | 系统分享",  // ui-copy-ignore
-        customizePlaceholder: "用 WPS 打开 | 打开方式 = WPS",  // ui-copy-ignore
+        customizeHint: "通用入口所有文件都出现；限定入口只对那一类出现。",  // ui-copy-ignore
+        scopeLabel: "适用于",  // ui-copy-ignore
+        purposeLabel: "用途",  // ui-copy-ignore
+        scopeWords: { all: "通用", video: "视频", audio: "音频", image: "图片", document: "文档", archive: "压缩包", code: "代码" },  // ui-copy-ignore
+        kindWords: { shell: "命令", app: "打开方式", shortcut: "快捷指令", url: "链接", share: "系统分享", service: "分享服务" },  // ui-copy-ignore
+        addKindEntry: "新增{kind}入口…",  // ui-copy-ignore
+        addRow: "添加一行",  // ui-copy-ignore
+        removeRow: "删除",  // ui-copy-ignore
+        namePlaceholder: "名称",  // ui-copy-ignore
+        valuePlaceholder: "命令或应用；可用 {path} {dir} {name} {url}",  // ui-copy-ignore
         save: "保存",  // ui-copy-ignore
         cancel: "取消",  // ui-copy-ignore
         saved: "已保存",
@@ -906,8 +922,16 @@ window.__ModuleLoader__.load({
         share: "Send to…",  // ui-copy-ignore
         shareFailed: "System share is unavailable here",  // ui-copy-ignore
         customizeTitle: "Custom actions",  // ui-copy-ignore
-        customizeHint: "One per line. Example: name | 打开方式 = WPS",  // ui-copy-ignore
-        customizePlaceholder: "Send to WeChat | open -a WeChat {path}",  // ui-copy-ignore
+        customizeHint: "An all-files action shows on every file; a limited one only on its kind.",  // ui-copy-ignore
+        scopeLabel: "Applies to",  // ui-copy-ignore
+        purposeLabel: "Purpose",  // ui-copy-ignore
+        scopeWords: { all: "All files", video: "Video", audio: "Audio", image: "Image", document: "Document", archive: "Archive", code: "Code" },  // ui-copy-ignore
+        kindWords: { shell: "Command", app: "Application", shortcut: "Shortcut", url: "Link", share: "System share", service: "Share service" },  // ui-copy-ignore
+        addKindEntry: "New {kind} action…",  // ui-copy-ignore
+        addRow: "Add row",  // ui-copy-ignore
+        removeRow: "Remove",  // ui-copy-ignore
+        namePlaceholder: "Name",  // ui-copy-ignore
+        valuePlaceholder: "Command or app; {path} {dir} {name} {url}",  // ui-copy-ignore
         save: "Save",  // ui-copy-ignore
         cancel: "Cancel",  // ui-copy-ignore
         saved: "Saved",
@@ -1162,11 +1186,11 @@ window.__ModuleLoader__.load({
       });
     }
 
-    function runCustom(label, target) {
-      postJson("actions-run", { label: label, path: target.path || "", url: target.url || "" }).then(function () {
+    function runCustom(entry, target) {
+      postJson("actions-run", { label: entry.label, scope: entry.scope || "all", path: target.path || "", url: target.url || "" }).then(function () {
         closeMenu(false);
       }, function (error) {
-        report("action-failed " + label + " " + String((error && error.message) || error));
+        report("action-failed " + entry.label + " " + String((error && error.message) || error));
         toast(strings().clipboardFailed);
       });
     }
@@ -1207,43 +1231,88 @@ window.__ModuleLoader__.load({
       });
     }
 
+    /** 文件后缀归到哪一类：mkv/mp4 都是视频，一个入口管一整类。 */
+    var FILE_KINDS = [
+      ["video", "mp4 mkv mov avi webm m4v mpg mpeg ts flv wmv 3gp"],
+      ["audio", "mp3 wav flac aac m4a ogg opus aiff wma amr"],
+      ["image", "png jpg jpeg gif webp bmp svg heic heif tif tiff avif ico"],
+      ["document", "pdf doc docx xls xlsx ppt pptx md txt rtf pages numbers key epub csv"],
+      ["archive", "zip rar 7z tar gz bz2 xz tgz dmg iso pkg"],
+      ["code", "js mjs cjs jsx ts tsx py rb go rs java c h cpp hpp cs sh bash zsh swift kt php css scss html htm json yml yaml toml xml sql ipynb"]
+    ];
+    var EXT_KIND = {};
+    FILE_KINDS.forEach(function (pair) {
+      String(pair[1]).split(" ").forEach(function (ext) {
+        if (ext !== "") EXT_KIND[ext] = pair[0];
+      });
+    });
+
+    /** 文件名 → 类别；认不出就是 null，只拿通用入口。 */
+    function kindOfName(value) {
+      if (value === null || value === undefined) return null;
+      var name = baseNameOf(String(value));
+      var dot = name.lastIndexOf(".");
+      if (dot <= 0 || dot === name.length - 1) return null;
+      var ext = name.slice(dot + 1).toLowerCase();
+      return EXT_KIND[ext] === undefined ? null : EXT_KIND[ext];
+    }
+
+    function kindOfTarget(target) {
+      if (target === null || target === undefined) return null;
+      var fromPath = kindOfName(target.path);
+      return fromPath === null ? kindOfName(target.name) : fromPath;
+    }
+
+    /** 通用入口人人有；限定入口只给同一类的文件。 */
+    function menuEntriesFor(entries, target) {
+      var kind = kindOfTarget(target);
+      return entries.filter(function (entry) {
+        var scope = entry === null || entry === undefined || entry.scope === undefined ? "all" : String(entry.scope);
+        return scope === "all" || (kind !== null && scope === kind);
+      });
+    }
+
     function customMenuItems(target) {
       if (!customLoaded) refreshCustomActions();
-      return customActions.map(function (entry) {
+      return menuEntriesFor(customActions, target).map(function (entry) {
         return { id: "custom:" + entry.label, label: entry.label, icon: "custom", run: function () {
-          runCustom(entry.label, target);
+          runCustom(entry, target);
         } };
       });
     }
 
-    var KIND_WORDS = { shell: "命令", app: "打开方式", shortcut: "快捷指令", url: "链接", share: "系统分享", service: "分享服务" };
-    var WORD_KINDS = { "命令": "shell", "打开方式": "app", "快捷指令": "shortcut", "链接": "url", "系统分享": "share", "分享服务": "service" };
 
-    function serializeAction(entry) {
-      if (entry.kind === "share") return entry.label + " | 系统分享";
-      return entry.label + " | " + (KIND_WORDS[entry.kind] || "命令") + " = " + entry.value;
+    var SCOPE_ORDER = ["all", "video", "audio", "image", "document", "archive", "code"];
+    var PURPOSE_ORDER = ["shell", "app", "url", "share", "service", "shortcut"];
+
+    function editorSelect(className, label, keys, words, value) {
+      var select = document.createElement("select");
+      select.className = "dcla-field " + className;
+      select.setAttribute("aria-label", label);
+      keys.forEach(function (key) {
+        var option = document.createElement("option");
+        option.value = key;
+        option.textContent = words[key] === undefined ? key : words[key];
+        select.appendChild(option);
+      });
+      select.value = keys.indexOf(value) >= 0 ? value : keys[0];
+      return select;
     }
 
-    function parseActionLine(text) {
-      var cut = text.indexOf("|");
-      if (cut <= 0) return null;
-      var label = text.slice(0, cut).trim();
-      var rest = text.slice(cut + 1).trim();
-      if (label === "" || rest === "") return null;
-      var word = null;
-      var eq = rest.indexOf("=");
-      if (eq > 0) word = rest.slice(0, eq).trim();
-      if (word !== null && WORD_KINDS[word] !== undefined) {
-        return { label: label, kind: WORD_KINDS[word], value: rest.slice(eq + 1).trim() };
-      }
-      return { label: label, kind: "shell", value: rest };
+    function editorInput(className, placeholder, value) {
+      var input = document.createElement("input");
+      input.type = "text";
+      input.className = "dcla-field " + className;
+      input.setAttribute("placeholder", placeholder);
+      input.value = value === undefined || value === null ? "" : String(value);
+      return input;
     }
 
-
-    /** 编辑界面：一行一个入口，保存后立刻出现在右键里。 */
-    function openActionsEditor() {
+    /** 编辑界面：一条入口一张小卡，能选通用或限定到某一类；保存后立刻出现在右键里。 */
+    function openActionsEditor(presetScope) {
       closeMenu(false);
       ensureStyle();
+      var zh = strings();
       var layer = document.createElement("div");
       layer.className = "dcla-layer";
       layer.style.pointerEvents = "auto";
@@ -1251,32 +1320,68 @@ window.__ModuleLoader__.load({
       var panel = document.createElement("div");
       panel.className = "dcla-editor";
       panel.setAttribute("role", "dialog");
-      panel.setAttribute("aria-label", strings().customizeTitle);
+      panel.setAttribute("aria-label", zh.customizeTitle);
 
       var hint = document.createElement("p");
       hint.className = "dcla-editor-hint";
-      hint.textContent = strings().customizeHint;
+      hint.textContent = zh.customizeHint;
 
-      var area = document.createElement("textarea");
-      area.setAttribute("spellcheck", "false");
-      area.setAttribute("placeholder", strings().customizePlaceholder);
-      area.value = customActions.map(serializeAction).join("\n");
+      var rows = document.createElement("div");
+      rows.className = "dcla-rows";
+      var boxes = [];
 
-      var row = document.createElement("div");
-      row.className = "dcla-editor-row";
+      var addRow = function (entry) {
+        if (boxes.length >= 20) return;
+        var box = document.createElement("div");
+        box.className = "dcla-edit-row";
+        var scope = editorSelect("dcla-scope", zh.scopeLabel, SCOPE_ORDER, zh.scopeWords,
+          entry === null ? (presetScope === undefined || presetScope === null ? "all" : presetScope) : entry.scope);
+        var purpose = editorSelect("dcla-purpose", zh.purposeLabel, PURPOSE_ORDER, zh.kindWords,
+          entry === null ? "shell" : entry.kind);
+        var name = editorInput("dcla-name", zh.namePlaceholder, entry === null ? "" : entry.label);
+        var value = editorInput("dcla-value", zh.valuePlaceholder, entry === null ? "" : entry.value);
+        var drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "dcla-drop";
+        drop.textContent = zh.removeRow;
+        drop.addEventListener("click", function () {
+          var at = boxes.indexOf(box);
+          if (at >= 0) boxes.splice(at, 1);
+          if (box.parentNode !== null) box.parentNode.removeChild(box);
+        });
+        box.appendChild(scope);
+        box.appendChild(purpose);
+        box.appendChild(name);
+        box.appendChild(value);
+        box.appendChild(drop);
+        rows.appendChild(box);
+        boxes.push(box);
+        return box;
+      };
+
+      customActions.forEach(function (entry) { addRow(entry); });
+      if (presetScope !== undefined && presetScope !== null) addRow(null);
+
+      var footer = document.createElement("div");
+      footer.className = "dcla-editor-row";
+      var add = document.createElement("button");
+      add.type = "button";
+      add.setAttribute("data-add", "true");
+      add.textContent = zh.addRow;
       var cancel = document.createElement("button");
       cancel.type = "button";
-      cancel.textContent = strings().cancel;
+      cancel.textContent = zh.cancel;
       var save = document.createElement("button");
       save.type = "button";
       save.setAttribute("data-primary", "true");
-      save.textContent = strings().save;
-      row.appendChild(cancel);
-      row.appendChild(save);
+      save.textContent = zh.save;
+      footer.appendChild(add);
+      footer.appendChild(cancel);
+      footer.appendChild(save);
 
       panel.appendChild(hint);
-      panel.appendChild(area);
-      panel.appendChild(row);
+      panel.appendChild(rows);
+      panel.appendChild(footer);
       layer.appendChild(panel);
       document.body.appendChild(layer);
 
@@ -1298,26 +1403,43 @@ window.__ModuleLoader__.load({
         }
       };
 
+      add.addEventListener("click", function () {
+        var box = addRow(null);
+        if (box !== undefined) {
+          var field = box.querySelector(".dcla-name");
+          if (field !== null) field.focus();
+          place();
+        }
+      });
       cancel.addEventListener("click", close);
       save.addEventListener("click", function () {
         var entries = [];
-        area.value.split(/\r?\n/u).forEach(function (line) {
-          var parsed = parseActionLine(line.trim());
-          if (parsed !== null) entries.push(parsed);
+        boxes.forEach(function (box) {
+          var scope = box.querySelector(".dcla-scope");
+          var purpose = box.querySelector(".dcla-purpose");
+          var name = box.querySelector(".dcla-name");
+          var value = box.querySelector(".dcla-value");
+          if (scope === null || purpose === null || name === null || value === null) return;
+          var label = String(name.value === undefined || name.value === null ? "" : name.value).trim();
+          var payload = String(value.value === undefined || value.value === null ? "" : value.value).trim();
+          if (label === "") return;
+          if (purpose.value !== "share" && payload === "") return;
+          entries.push({ label: label, kind: purpose.value, value: payload, scope: scope.value });
         });
         postJson("actions-save", { actions: entries }).then(function (data) {
           customActions = Array.isArray(data.actions) ? data.actions : [];
           customLoaded = true;
           close();
-          toast(strings().saved);
+          toast(zh.saved);
         }, function (error) {
           report("actions-save-failed " + String((error && error.message) || error));
-          toast(strings().saveFailed);
+          toast(zh.saveFailed);
         });
       });
 
       document.addEventListener("keydown", onKey, true);
-      area.focus();
+      var first = rows.querySelector(".dcla-name");
+      if (first !== null) first.focus();
     }
 
     function openMenu(path, x, y, options) {
@@ -1329,6 +1451,7 @@ window.__ModuleLoader__.load({
       var url = settings.url === undefined || settings.url === null ? null : String(settings.url);
       var hasPath = path !== null && path !== undefined;
       var cardName = settings.name === undefined || settings.name === null ? null : String(settings.name);
+      var kind = kindOfTarget({ path: hasPath ? path : null, name: cardName });
       var items = [];
       if (image !== null) {
         items.push({ id: "copyImage", label: strings().copyImage, icon: "image", run: function () {
@@ -1384,15 +1507,24 @@ window.__ModuleLoader__.load({
       }
       if (hasPath || url !== null) {
         try {
-          items = items.concat(customMenuItems({ path: hasPath ? path : "", url: url === null ? "" : url }));
+          items = items.concat(customMenuItems({
+            path: hasPath ? path : "",
+            url: url === null ? "" : url,
+            name: cardName === null ? "" : cardName
+          }));
         } catch (ignored) {
           /* 自定义条目读不出来时，基础菜单照常给 */
         }
       }
       if (hasPath || url !== null || cardName !== null) {
         items.push({ id: "customize", label: strings().customize, icon: "custom", run: function () {
-          openActionsEditor();
+          openActionsEditor(null);
         } });
+        if (kind !== null) {
+          items.push({ id: "customizeKind", label: strings().addKindEntry.replace("{kind}", strings().scopeWords[kind]), icon: "custom", run: function () {
+            openActionsEditor(kind);
+          } });
+        }
       }
       if (items.length === 0) return;
 
@@ -1767,7 +1899,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.7");
+      report("ready 0.6.8");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -1826,6 +1958,9 @@ window.__ModuleLoader__.load({
     testSeams.cardFileName = cardFileName;
     testSeams.pathForCardName = pathForCardName;
     testSeams.baseNameOf = baseNameOf;
+    testSeams.kindOfName = kindOfName;
+    testSeams.kindOfTarget = kindOfTarget;
+    testSeams.menuEntriesFor = menuEntriesFor;
     module.exports = {};
     module.exports.inject = inject;
     module.exports.apply = apply;

@@ -23,26 +23,24 @@
 
 ## 自定义配置
 
-菜单最下面能加自己的条目，保存后立刻出现。一条一行，左边是你想要的叫法，右边是它实际做的事：
+菜单最下面能加自己的条目，保存后立刻出现；每条自己决定给谁看：
 
-```
-发到微信好友 | 系统分享
-用谷歌浏览器打开 | 打开方式 = Google Chrome
-用 VS Code 看 | 打开方式 = Visual Studio Code
-截图存档 | 命令 = cp {path} ~/Pictures/inbox/
-用 PowerShell 转个格式 | powershell = Add-Type -AssemblyName System.Drawing; …
-```
+- **通用**：所有文件和链接都出现。
+- **限定到一类**：只在那类文件上出现。视频（mp4/mkv/mov…）、音频、图片、文档、压缩包、代码各算一类，同一个入口管一整类，不用按后缀一条条配。
 
-写「系统分享」就是弹同一个系统选择框，只是换个叫法好认；写「命令」「打开方式」「快捷指令」「链接」就直接执行那件事。编辑器里也列出本机能用的一键项（发送到…、已装的 App、快捷指令），点一下就是一行，不用自己敲。
+两种入口都在同一个编辑器里：右键任意文件点「自定义入口…」配通用入口，右键一个视频点「新增视频入口…」直接配只对视频生效的。编辑器里也列出本机能用的一键项（发送到…、已装的 App、快捷指令），点一下就是一条，不用自己敲。
 
 清单存在 `~/.dsh/chat-link-actions/custom-actions.json`，也可以用命令行配：
 
 ```sh
 dsh-chat-link-actions add --label 发到微信好友 --kind share
 dsh-chat-link-actions add --label 用谷歌浏览器打开 --kind app --value "Google Chrome"
+dsh-chat-link-actions add --label 用 VLC 打开 --kind app --value VLC --scope video
 dsh-chat-link-actions list
-dsh-chat-link-actions protocol   # 全部类型、占位符、HTTP 路由
+dsh-chat-link-actions protocol   # 全部类型、占位符、类别、HTTP 路由
 ```
+
+`--scope` 不写就是通用（`all`），旧清单里的条目也按通用算。
 
 脚本类的入口分两种：`shell` 走默认 shell，`powershell` / `pwsh` 走 PowerShell 5.1 / 7+。占位符在 PowerShell 里是单引号字面量，含 `$`、空格、中文、逗号的路径都不需要自己转义。
 

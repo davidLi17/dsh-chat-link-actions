@@ -367,3 +367,37 @@ test('附件卡片：同一条消息里的同名链接也算（链接文字只�
   nest(card, message); nest(message, body)
   assert.equal(paths.pathForCardName(card, '录屏.mp4'), '/Users/example/videos/录屏.mp4')
 })
+
+test('自定义入口：按文件类别筛，认不出的只给通用', () => {
+  const entries = [
+    { label: '通用', kind: 'app', value: 'WPS', scope: 'all' },
+    { label: '视频', kind: 'app', value: 'VLC', scope: 'video' },
+    { label: '图片', kind: 'app', value: 'Preview', scope: 'image' },
+    { label: '没写范围', kind: 'app', value: 'Old' }
+  ]
+  const labels = (target) => paths.menuEntriesFor(entries, target).map((entry) => entry.label)
+  assert.deepEqual(labels({ path: '/tmp/电影.mkv' }), ['通用', '视频', '没写范围'])
+  assert.deepEqual(labels({ path: '/tmp/clip.mp4' }), ['通用', '视频', '没写范围'])
+  assert.deepEqual(labels({ path: '/tmp/a.MP3' }), ['通用', '没写范围'].filter((label) => label !== '视频'))
+  assert.deepEqual(labels({ path: '/tmp/photo.png' }), ['通用', '图片', '没写范围'])
+  assert.deepEqual(labels({ path: '/tmp/mystery.xyz' }), ['通用', '没写范围'])
+  assert.deepEqual(labels({ path: '', url: 'https://x.test/a' }), ['通用', '没写范围'])
+  assert.deepEqual(labels({ path: '', name: '报告.pdf' }), ['通用', '没写范围'])
+  assert.deepEqual(labels({ path: '', name: '视频.mkv' }), ['通用', '视频', '没写范围'])
+})
+
+test('自定义入口：后缀归到种类，不认识返回 null', () => {
+  assert.equal(paths.kindOfName('a.mkv'), 'video')
+  assert.equal(paths.kindOfName('A.MP4'), 'video')
+  assert.equal(paths.kindOfName('/tmp/x.flac'), 'audio')
+  assert.equal(paths.kindOfName('p.HEIC'), 'image')
+  assert.equal(paths.kindOfName('r.docx'), 'document')
+  assert.equal(paths.kindOfName('b.7z'), 'archive')
+  assert.equal(paths.kindOfName('m.tsx'), 'code')
+  assert.equal(paths.kindOfName('noext'), null)
+  assert.equal(paths.kindOfName('.gitignore'), null)
+  assert.equal(paths.kindOfName('a.'), null)
+  assert.equal(paths.kindOfName(null), null)
+  assert.equal(paths.kindOfTarget({ path: '/tmp/a.webm' }), 'video')
+  assert.equal(paths.kindOfTarget({ path: '', name: 'a.webm' }), 'video')
+})

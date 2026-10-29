@@ -20,6 +20,7 @@ import {
   CUSTOM_KINDS,
   customActionsFile,
   sanitizeCustomActions,
+  CUSTOM_SCOPES,
   quoteArgument,
   encodeExplorerSelect,
   encodeWindowsArgument,
@@ -346,13 +347,13 @@ test('自定义入口：类型决定怎么把文件交出去', () => {
       { label: '空的', kind: 'app', value: '  ' }
     ]),
     [
-      { label: '发送到微信', kind: 'share', value: '' },
-      { label: '发送到手机', kind: 'app', value: '小米互联服务' },
-      { label: '分享给设备', kind: 'service', value: '小米互联服务' },
-      { label: '快捷发送', kind: 'shortcut', value: '发送到手机' },
-      { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}' },
-      { label: '打开', kind: 'shell', value: 'open -a WeChat {path}' },
-      { label: '未知类型', kind: 'shell', value: 'rm -rf' }
+      { label: '发送到微信', kind: 'share', value: '', scope: 'all' },
+      { label: '发送到手机', kind: 'app', value: '小米互联服务', scope: 'all' },
+      { label: '分享给设备', kind: 'service', value: '小米互联服务', scope: 'all' },
+      { label: '快捷发送', kind: 'shortcut', value: '发送到手机', scope: 'all' },
+      { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}', scope: 'all' },
+      { label: '打开', kind: 'shell', value: 'open -a WeChat {path}', scope: 'all' },
+      { label: '未知类型', kind: 'shell', value: 'rm -rf', scope: 'all' }
     ]
   )
   assert.equal(customUrl('mi://send?p={path}', { path: '/tmp/a b.png' }), 'mi://send?p=%2Ftmp%2Fa%20b.png')
@@ -360,7 +361,7 @@ test('自定义入口：类型决定怎么把文件交出去', () => {
 
 test('自定义入口：只收有限的小清单', () => {
   assert.deepEqual(sanitizeCustomActions([{ label: ' A ', command: ' echo {path} ' }, { label: '', command: 'x' }]), [
-    { label: 'A', kind: 'shell', value: 'echo {path}' }
+    { label: 'A', kind: 'shell', value: 'echo {path}', scope: 'all' }
   ])
   assert.deepEqual(sanitizeCustomActions('nope'), [])
   const many = Array.from({ length: 21 }, (_, index) => ({ label: `l${index}`, command: 'true' }))
@@ -370,19 +371,37 @@ test('自定义入口：只收有限的小清单', () => {
   assert.throws(() => sanitizeCustomActions([{ label: 'a', command: 'x\ny' }]), /control-character/u)
 })
 
+test('自定义入口：限定入口只认已知类别，缺省是通用', () => {
+  assert.deepEqual(CUSTOM_SCOPES, ['all', 'video', 'audio', 'image', 'document', 'archive', 'code'])
+  assert.deepEqual(
+    sanitizeCustomActions([
+      { label: '用 VLC 打开', kind: 'app', value: 'VLC', scope: 'video' },
+      { label: '老配置', kind: 'app', value: 'WPS' },
+      { label: '乱写', kind: 'app', value: 'x', scope: 'gif' }
+    ]),
+    [
+      { label: '用 VLC 打开', kind: 'app', value: 'VLC', scope: 'video' },
+      { label: '老配置', kind: 'app', value: 'WPS', scope: 'all' },
+      { label: '乱写', kind: 'app', value: 'x', scope: 'all' }
+    ]
+  )
+})
+
 test('自定义入口：配置文件在 profile 下', () => {
   assert.equal(customActionsFile('/home/me'), join('/home/me', '.dsh', 'chat-link-actions', 'custom-actions.json'))
   assert.ok(customActionsFile('/home/me').endsWith('custom-actions.json'))
 })
 
 test('对外协议：一份数据说清所有入口类型和调用方式', () => {
-  assert.equal(ACTION_PROTOCOL.version, 2)
+  assert.equal(ACTION_PROTOCOL.version, 3)
   assert.deepEqual(ACTION_PROTOCOL.kinds.map((item) => item.kind).sort(), [...CUSTOM_KINDS].sort())
   for (const entry of ACTION_PROTOCOL.kinds) {
     assert.equal(typeof entry.effect, 'string')
     assert.deepEqual(Object.keys(entry.example).sort(), ['kind', 'label', 'value'])
     assert.ok(CUSTOM_KINDS.includes(entry.example.kind))
   }
+  assert.deepEqual(ACTION_PROTOCOL.scopes.map((item) => item.scope), [...CUSTOM_SCOPES])
+  for (const scope of ACTION_PROTOCOL.scopes) assert.equal(typeof scope.label, 'string')
   assert.ok(ACTION_PROTOCOL.http.routes.some((route) => route.action === 'actions-add'))
   assert.equal(ACTION_PROTOCOL.limits.entries, 20)
 })

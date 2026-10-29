@@ -26,6 +26,16 @@ node <plugin>/cli.js list            # 确认
 | 「存到手机」「用某 App 的协议打开」 | `url` | 带占位符的链接 |
 | 「跑某个快捷指令」 | `shortcut` | 快捷指令名字（仅 macOS） |
 
+## 入口给谁看（scope）
+
+用户说「只对视频/图片/文档…生效」时加 `scope`；不说就是通用 `all`。
+可用值：`all`、`video`、`audio`、`image`、`document`、`archive`、`code`——按文件类别，一类管一批后缀（mkv 和 mp4 都是 `video`）。
+
+```bash
+node <plugin>/cli.js add --label 用 VLC 打开 --kind app --value VLC --scope video
+node <plugin>/cli.js apply --json '[{"label":"用 VLC 打开","kind":"app","value":"VLC","scope":"video"}]'
+```
+
 ## 约束
 
 - `label` ≤ 40 字，`value` ≤ 400 字，总条目 ≤ 20；超了写入被拒绝并发错，不会截断。
@@ -36,6 +46,7 @@ node <plugin>/cli.js list            # 确认
 - 拿不准节点上是 5.1 还是 7 就写 `powershell`；两个都要支持就配两条，脚本内容一样。
 - 一次配 1–3 条。菜单是给人快速点的，堆满反而难用。
 - 不认识的 `kind` 会被当成 `shell`，别依赖这个兜底。
+- 不认识的 `scope` 会被当成 `all`；认不出的后缀只给 `all` 的入口，不要为单个后缀另配一条。
 - 写完不要说「请重启」「请刷新页面」——界面最多 5 秒自己跟上。
 
 ## 完整字段与错误码

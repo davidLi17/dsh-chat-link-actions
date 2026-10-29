@@ -1,9 +1,9 @@
 {
-  "version": 2,
+  "version": 3,
   "storage": {
     "file": "~/.dsh/chat-link-actions/custom-actions.json",
-    "shape": "{ \"version\": 1, \"actions\": [ { \"label\": string, \"kind\": Kind, \"value\": string } ] }",
-    "note": "菜单与 CLI 共用这个文件。写完 5 秒内界面自己刷新，不用重启、不用刷新页面。"
+    "shape": "{ \"version\": 1, \"actions\": [ { \"label\": string, \"kind\": Kind, \"value\": string, \"scope\": Scope } ] }",
+    "note": "菜单与 CLI 共用这个文件。写完 5 秒内界面自己刷新，不用重启、不用刷新页面。没有 scope 的旧条目按 all 处理。"
   },
   "limits": {
     "entries": 20,
@@ -11,6 +11,55 @@
     "value": 400,
     "note": "超出上限时写入被拒绝并报错，不会截断。"
   },
+  "scopes": [
+    {
+      "scope": "all",
+      "label": "通用",
+      "effect": "所有文件和链接都出现",
+      "example": {
+        "label": "用 WPS 打开",
+        "kind": "app",
+        "value": "WPS",
+        "scope": "all"
+      }
+    },
+    {
+      "scope": "video",
+      "label": "视频",
+      "extends": "mp4 mkv mov avi webm m4v mpg mpeg ts flv wmv 3gp",
+      "example": {
+        "label": "用 VLC 打开",
+        "kind": "app",
+        "value": "VLC",
+        "scope": "video"
+      }
+    },
+    {
+      "scope": "audio",
+      "label": "音频",
+      "extends": "mp3 wav flac aac m4a ogg opus aiff wma amr"
+    },
+    {
+      "scope": "image",
+      "label": "图片",
+      "extends": "png jpg jpeg gif webp bmp svg heic heif tif tiff avif ico"
+    },
+    {
+      "scope": "document",
+      "label": "文档",
+      "extends": "pdf doc docx xls xlsx ppt pptx md txt rtf pages numbers key epub csv"
+    },
+    {
+      "scope": "archive",
+      "label": "压缩包",
+      "extends": "zip rar 7z tar gz bz2 xz tgz dmg iso pkg"
+    },
+    {
+      "scope": "code",
+      "label": "代码",
+      "extends": "js mjs cjs jsx ts tsx py rb go rs java c h cpp hpp cs sh bash zsh swift kt php css scss html htm json yml yaml toml xml sql ipynb"
+    }
+  ],
   "placeholders": [
     "{path}",
     "{dir}",
@@ -146,7 +195,7 @@
       {
         "action": "actions-run",
         "method": "POST",
-        "body": "{ label, path?, url? }",
+        "body": "{ label, scope?, path?, url? }",
         "returns": "{ ok }"
       }
     ]
@@ -167,7 +216,8 @@
     "fast_path": [
       "node <plugin>/cli.js detect  → 看本机有哪些 App 和快捷指令，拿现成 value",
       "node <plugin>/cli.js apply --json '[{\"label\":\"用 WPS 打开\",\"kind\":\"app\",\"value\":\"WPS\"}]'",
-      "node <plugin>/cli.js list → 确认最终入口"
+      "node <plugin>/cli.js list → 确认最终入口",
+      "node <plugin>/cli.js add --label 用 VLC 打开 --kind app --value VLC --scope video"
     ],
     "rules": [
       "label 是用户在菜单里看到的字，写动词短语，例如「用 WPS 打开」「发送到微信」。",
@@ -177,7 +227,8 @@
       "share 的 value 必须是空字符串；它弹系统面板，具体发给谁由用户在面板里选。",
       "shell 里放占位符 {path} {dir} {name} {url}，它们会被正确加引号；不要把路径硬编码。",
       "一次配 1 到 3 条就够。菜单是给人快速点的，堆满反而难用。",
-      "写完不要叫用户重启或刷新页面；最多说「已经配好了」。"
+      "写完不要叫用户重启或刷新页面；最多说「已经配好了」。",
+      "scope 决定这条入口出现在哪些文件上：all 是通用，其余按文件类别（video/audio/image/document/archive/code）；没写 scope 等于 all，旧的单行格式不用改。"
     ],
     "recipes": [
       {

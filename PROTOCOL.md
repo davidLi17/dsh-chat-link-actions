@@ -3,11 +3,27 @@
 菜单里的每条入口都是一行 JSON。人和 agent 写同一个文件，写完立即生效，不用重启。
 
 ```json
-[ { "label": "发送到微信", "kind": "service", "value": "发送到微信" } ]
+[ { "label": "发送到微信", "kind": "service", "value": "发送到微信", "scope": "all" } ]
 ```
 
 文件：`~/.dsh/chat-link-actions/custom-actions.json`（裸数组，不是 `{version, actions}`）
 上限：20 条；`label` 40 字；`value` 400 字。
+
+## 入口给谁看（scope）
+
+`scope` 决定这条入口出现在哪些文件上。省略等于 `all`，旧清单不用改。
+
+| scope | 出现在 | 包含的后缀（举例） |
+| --- | --- | --- |
+| `all` | 所有文件和链接 | — |
+| `video` | 视频 | mp4 mkv mov avi webm m4v mpg mpeg ts flv wmv 3gp |
+| `audio` | 音频 | mp3 wav flac aac m4a ogg opus aiff wma amr |
+| `image` | 图片 | png jpg jpeg gif webp bmp svg heic heif tif tiff avif ico |
+| `document` | 文档 | pdf doc docx xls xlsx ppt pptx md txt rtf pages numbers key epub csv |
+| `archive` | 压缩包 | zip rar 7z tar gz bz2 xz tgz dmg iso pkg |
+| `code` | 代码 | js mjs cjs jsx ts tsx py rb go rs java c h cpp hpp cs sh bash zsh swift kt php css scss html htm json yml yaml toml xml sql ipynb |
+
+认不出后缀的目标（网页链接、无扩展名文件）只给 `all` 的入口，不猜类别。不认识的 `scope` 按 `all` 收下。
 
 ## 入口类型
 
@@ -36,6 +52,7 @@ node ~/.dsh/profiles/desktop/node_modules/dsh-chat-link-actions/cli.js detect
 node <plugin>/cli.js add --label 发送到微信 --kind service --value 发送到微信
 node <plugin>/cli.js add --label 存到手机 --kind shortcut --value 存到手机
 node <plugin>/cli.js add --label 发送到小米手机 --kind url --value 'mi://send?p={path}'
+node <plugin>/cli.js add --label 用 VLC 打开 --kind app --value VLC --scope video
 node <plugin>/cli.js list
 node <plugin>/cli.js remove 发送到微信
 node <plugin>/cli.js run 发送到微信 --path /tmp/a.png

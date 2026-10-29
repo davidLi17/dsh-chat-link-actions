@@ -6,6 +6,7 @@
  */
 import {
   ACTION_PROTOCOL,
+  CUSTOM_SCOPES,
   customActionsFile,
   detectTargets,
   loadCustomActions,
@@ -55,10 +56,12 @@ try {
     const label = flags.label ?? words[0]
     const kind = flags.kind ?? words[1] ?? 'shell'
     const value = flags.value ?? words.slice(2).join(' ') ?? ''
+    const scope = flags.scope ?? 'all'
     if (label === undefined || label === '') throw new Error('缺少 --label')
+    if (!CUSTOM_SCOPES.includes(scope)) throw new Error(`不认识的 --scope：${scope}。可用：${CUSTOM_SCOPES.join(' / ')}`)
     const current = await read()
     const index = current.findIndex((entry) => entry.label === label)
-    const entry = { label, kind, value }
+    const entry = { label, kind, value, scope }
     if (index >= 0) current[index] = entry
     else current.push(entry)
     console.log(JSON.stringify(await write(current), null, 2))

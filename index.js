@@ -285,6 +285,12 @@ const CUSTOM_LIMITS = { entries: 20, label: 40, value: 400 }
 export const CUSTOM_KINDS = ['shell', 'powershell', 'pwsh', 'app', 'shortcut', 'url', 'share', 'service']
 
 /**
+ * 一条入口写给谁看。`all` 是通用入口，出现在所有文件上；其余是限定入口，
+ * 只在文件属于那一类时出现（mkv 和 mp4 都是 `video`，不看具体后缀）。
+ */
+export const CUSTOM_SCOPES = ['all', 'video', 'audio', 'image', 'document', 'archive', 'code']
+
+/**
  * Reject anything that is not a small list of known kinds with a short value.
  * A bare `{ label, command }` written by an older version keeps working: it is
  * a shell entry.
@@ -303,7 +309,9 @@ export function sanitizeCustomActions(value) {
     if (label.length > CUSTOM_LIMITS.label) throw new Error('label-too-long')
     if (payload.length > CUSTOM_LIMITS.value) throw new Error('value-too-long')
     if (/[\u0000-\u001f]/u.test(label + payload)) throw new Error('control-character')
-    kept.push({ label, kind, value: payload })
+    const rawScope = String(entry?.scope ?? 'all').trim()
+    const scope = CUSTOM_SCOPES.includes(rawScope) ? rawScope : 'all'
+    kept.push({ label, kind, value: payload, scope })
   }
   return kept
 }
@@ -968,7 +976,10 @@ export function apply(ctx) {
           const label = String(body?.label ?? '')
           const direct = body?.kind === 'share' ? { label: '发送到…', kind: 'share', value: '' } : null
           const actions = await loadCustomActions(customActionsFile())
-          const chosen = direct ?? actions.find((entry) => entry.label === label)
+          /* 同名入口可能分属不同类别：先认 scope，再退回到第一条同名。 */
+          const wantScope = body?.scope === undefined ? '' : String(body.scope)
+          const same = actions.filter((entry) => entry.label === label)
+          const chosen = direct ?? same.find((entry) => wantScope !== '' && (entry.scope ?? 'all') === wantScope) ?? same[0]
           if (chosen === undefined) return reply(res, 404, { ok: false, error: 'not-configured' })
           await runCustomAction(chosen, { path: body?.path, url: body?.url })
           trace(`action-ran ${chosen.label}`)
