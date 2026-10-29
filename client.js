@@ -812,7 +812,7 @@ window.__ModuleLoader__.load({
       "backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
       "-webkit-backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px) saturate(180%));",
       "color:var(--dsw-alias-label-primary,#f2f3f5);border-radius:var(--dsw-radius-lg,12px);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.3));",
-      "font:var(--dsw-font-sm-14,14px)/1.6 system-ui,-apple-system,'PingFang SC',sans-serif;}",
+      "font:var(--dsw-font-sm-14,14px)/1.6 var(--dsw-font-family,system-ui),-apple-system,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;}",
       ".dcla-rows{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;}",
       ".dcla-edit-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;",
       "border:1px solid rgba(127,127,127,.18);border-radius:var(--dsw-radius-lg,12px);}",
