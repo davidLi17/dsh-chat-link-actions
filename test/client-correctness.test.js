@@ -253,3 +253,30 @@ test('当前消息里只有一条同名路径时就认它', () => {
   const card = cardWith('clip.mp4', message)
   assert.equal(paths.pathForCardName(card, 'clip.mp4'), '/Users/example/clip.mp4')
 })
+
+test('系统分享与自定义分享都保留 Windows 面板焦点，macOS 仍可失焦关闭', async () => {
+  const source = await readFile(new URL('../client.js', import.meta.url), 'utf8')
+  const start = source.indexOf('    function runCustom(entry, target) {')
+  const end = source.indexOf('    /** 文件后缀归到哪一类', start)
+  assert.ok(start > 0 && end > start)
+  for (const dismissOnBlur of [false, true]) {
+    for (const custom of [false, true]) {
+      const events = []
+      const calls = []
+      const sandbox = {
+        document: { addEventListener: name => events.push(`document:${name}`), removeEventListener() {} },
+        window: { addEventListener: name => events.push(`window:${name}`), removeEventListener() {} },
+        postJson: (action) => { calls.push(action); return Promise.resolve({ shareDismissOnBlur: dismissOnBlur }) },
+        closeMenu() {}, setTimeout() {}, report() {}, toast() {}, strings: () => ({}),
+      }
+      vm.createContext(sandbox)
+      vm.runInContext(source.slice(start, end), sandbox)
+      if (custom) sandbox.runCustom({ label: '分享', kind: 'share' }, { path: 'C:\\file.txt' })
+      else sandbox.runShare('C:\\file.txt')
+      await new Promise(resolve => setImmediate(resolve))
+      assert.ok(events.includes('document:pointerdown'))
+      assert.equal(events.includes('window:blur'), dismissOnBlur)
+      assert.deepEqual(calls, ['actions-run'])
+    }
+  }
+})

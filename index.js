@@ -14,6 +14,8 @@ import { appendFile, lstat, mkdir, readdir, readFile, rename, stat, writeFile } 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dirname, isAbsolute, win32 as pathWin32 } from 'node:path'
+import { listWindowsServices, listWindowsShortcuts, runWindowsService, runWindowsShortcut, runWindowsOpen } from './windows-actions.js'
+import { showWindowsShare } from './windows-share.js'
 
 /** Services required before mounting: route registration + the web runtime fence. */
 export const inject = ['webServer', 'connection']
@@ -351,7 +353,7 @@ export function powershellScript(template, target = {}, platform = process.platf
  * 也能跑同一份脚本，方便在本机先把场景验完再上 Windows。
  */
 export function powershellCommand(entry, target = {}, platform = process.platform) {
-  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', powershellScript(entry.value, target, platform)]
+  const args = ['-NoProfile', '-NonInteractive', '-Command', powershellScript(entry.value, target, platform)]
   if (entry.kind === 'pwsh') return { executable: platform === 'win32' ? 'pwsh.exe' : 'pwsh', args }
   return { executable: platform === 'win32' ? 'powershell.exe' : 'powershell', args }
 }
@@ -573,28 +575,11 @@ export async function detectTargets(home = homedir(), platform = process.platfor
       extra += 1
     }
   } else if (platform === 'win32') {
-    const roots = [
-      join(process.env.ProgramFiles ?? 'C:\\Program Files'),
-      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'),
-      join(process.env.LOCALAPPDATA ?? '', 'Programs'),
-    ]
-    const known = [
-      { exe: 'Tencent\\WeChat\\WeChat.exe', label: '微信' },
-      { exe: 'Tencent\\WeCom\\WXWork.exe', label: '企业微信' },
-      { exe: 'Tencent\\QQNT\\QQ.exe', label: 'QQ' },
-      { exe: 'DingTalk\\Dingtalk.exe', label: '钉钉' },
-      { exe: 'Feishu\\Feishu.exe', label: '飞书' },
-    ]
-    for (const root of roots) {
-      for (const item of known) {
-        const full = join(root, item.exe)
-        try {
-          const found = await stat(full)
-          if (found.isFile()) targets.push({ label: item.label, kind: 'app', value: full })
-        } catch {
-          /* absent */
-        }
-      }
+    targets.push({ label: '发送到…', kind: 'share', value: '' })
+    for (const name of await listWindowsServices()) targets.push({ label: `发送到：${name}`, kind: 'service', value: name })
+    for (const name of await listWindowsShortcuts()) targets.push({ label: `工作流：${name}`, kind: 'shortcut', value: name })
+    for (const app of (await listInstalledApps(home, platform)).slice(0, 24)) {
+      targets.push({ label: `用 ${app.label} 打开`, kind: 'app', value: app.value })
     }
   }
   return targets
@@ -607,6 +592,7 @@ let serviceCache = { at: 0, list: [] }
  * 枚举一次要起一个 osascript（约 1 秒），结果缓一分钟。
  */
 export async function listShareServices() {
+  if (process.platform === 'win32') return listWindowsServices()
   if (process.platform !== 'darwin') return []
   if (Date.now() - serviceCache.at < 60_000) return serviceCache.list
   const paths = shareHelperPaths()
@@ -654,6 +640,7 @@ export async function listShareServices() {
 let shortcutCache = { at: 0, list: [] }
 
 async function listShortcuts() {
+  if (process.platform === 'win32') return listWindowsShortcuts()
   if (process.platform !== 'darwin') return []
   if (Date.now() - shortcutCache.at < 60_000) return shortcutCache.list
   const list = await readShortcuts()
@@ -762,6 +749,7 @@ export async function runCustomAction(entry, target = {}) {
   const folder = path === '' ? '' : dirname(path)
   const platform = process.platform
   if (entry.kind === 'service') {
+    if (platform === 'win32') return runWindowsService(entry.value, path)
     if (platform !== 'darwin') throw new Error('service-needs-macos')
     if (path === '') throw new Error('service-needs-file')
     const helper = await ensureShareHelper()
@@ -774,12 +762,22 @@ export async function runCustomAction(entry, target = {}) {
   }
   if (entry.kind === 'share') {
     if (path === '') throw new Error('share-needs-file')
+    if (platform === 'win32') {
+      requireAbsolute(path)
+      cancelSharePanel()
+      const { child, ready } = showWindowsShare(path)
+      activeShare = child
+      child.on('exit', () => dropChild(child, 'active'))
+      try { await ready } catch (error) { dropChild(child, 'active'); throw error }
+      return
+    }
     const helper = await ensureShareHelper()
     if (!helper.ok) throw new Error(helper.reason ?? 'share-unavailable')
     showSharePanel(path, shareHelperPaths())
     return
   }
   if (entry.kind === 'shortcut') {
+    if (platform === 'win32') return runWindowsShortcut(entry.value, path)
     if (platform !== 'darwin') throw new Error('shortcut-needs-macos')
     if (path === '') throw new Error('shortcut-needs-file')
     spawn('shortcuts', ['run', entry.value, '-i', path], { detached: true, stdio: 'ignore' }).unref()
@@ -787,7 +785,7 @@ export async function runCustomAction(entry, target = {}) {
   }
   if (entry.kind === 'url') {
     const open = customUrl(entry.value, target)
-    if (platform === 'win32') spawn(`start "" ${quoteArgument(open, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
+    if (platform === 'win32') await runWindowsOpen(null, open)
     else spawn('open', [open], { detached: true, stdio: 'ignore' }).unref()
     return
   }
@@ -795,7 +793,7 @@ export async function runCustomAction(entry, target = {}) {
     /* 网页链接没有磁盘文件：把这个地址交给 App 打开。 */
     const where = appLaunchValue(path, target.url)
     if (where === '') throw new Error('app-needs-file')
-    if (platform === 'win32') spawn(`start "" ${quoteArgument(entry.value, 'win32')} ${quoteArgument(where, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
+    if (platform === 'win32') await runWindowsOpen(entry.value, where)
     else spawn('open', ['-a', entry.value, where], { detached: true, stdio: 'ignore' }).unref()
     return
   }
@@ -871,7 +869,7 @@ async function trace(line) {
 }
 
 export function apply(ctx) {
-  trace('mounted 0.5.9')
+  trace('mounted 26.10.31-lhg')
   void ensureShareHelper().then((helper) => {
     if (helper.ok === true) warmShareHelper(shareHelperPaths())
   }).catch(() => {})
@@ -991,7 +989,7 @@ export function apply(ctx) {
           if (chosen === undefined) return reply(res, 404, { ok: false, error: 'not-configured' })
           await runCustomAction(chosen, { path: body?.path, url: body?.url })
           trace(`action-ran ${chosen.label}`)
-          return reply(res, 200, { ok: true })
+          return reply(res, 200, { ok: true, shareDismissOnBlur: process.platform !== 'win32' })
         }
         if (action !== 'reveal') {
           return reply(res, 400, { ok: false, error: 'unknown action' })

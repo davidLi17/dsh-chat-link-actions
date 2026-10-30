@@ -23,10 +23,10 @@ test('两种 kind 各自挑对可执行文件', () => {
   assert.equal(powershellCommand({ kind: 'pwsh', value: 'x' }, {}, 'darwin').executable, 'pwsh')
 })
 
-test('脚本参数固定：不读 profile、不交互、不卡执行策略', () => {
+test('脚本参数固定：不读 profile、不交互、保留执行策略', () => {
   const { args } = powershellCommand({ kind: 'powershell', value: 'Get-Location' }, {}, 'win32')
-  assert.deepEqual(args.slice(0, 5), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command'])
-  assert.equal(args[5], 'Get-Location')
+  assert.deepEqual(args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command'])
+  assert.equal(args[3], 'Get-Location')
 })
 
 test('单引号字面量：$ 不展开，引号写成两个', () => {

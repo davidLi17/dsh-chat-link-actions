@@ -1283,8 +1283,9 @@ window.__ModuleLoader__.load({
     }
 
     function runCustom(entry, target) {
-      postJson("actions-run", { label: entry.label, scope: entry.scope || "all", path: target.path || "", url: target.url || "" }).then(function () {
+      postJson("actions-run", { label: entry.label, scope: entry.scope || "all", path: target.path || "", url: target.url || "" }).then(function (data) {
         closeMenu(false);
+        if (entry.kind === "share") watchShareDismiss(data.shareDismissOnBlur);
       }, function (error) {
         report("action-failed " + entry.label + " " + String((error && error.message) || error));
         toast(customFailureText(error));
@@ -1293,7 +1294,7 @@ window.__ModuleLoader__.load({
 
     /** 面板开着的时候，用户点界面任何地方就把它收掉。 */
     var shareWatcher = null;
-    function watchShareDismiss() {
+    function watchShareDismiss(dismissOnBlur) {
       stopShareDismiss();
       var fired = false;
       var kill = function () {
@@ -1310,7 +1311,7 @@ window.__ModuleLoader__.load({
         shareWatcher = null;
       };
       document.addEventListener("pointerdown", onDown, true);
-      window.addEventListener("blur", onBlur);
+      if (dismissOnBlur !== false) window.addEventListener("blur", onBlur);
       setTimeout(function () { if (shareWatcher !== null) stopShareDismiss(); }, 120000);
     }
     function stopShareDismiss() {
@@ -1318,9 +1319,9 @@ window.__ModuleLoader__.load({
     }
 
     function runShare(path) {
-      postJson("actions-run", { label: "", kind: "share", path: path, url: "" }).then(function () {
+      postJson("actions-run", { label: "", kind: "share", path: path, url: "" }).then(function (data) {
         closeMenu(false);
-        watchShareDismiss();
+        watchShareDismiss(data.shareDismissOnBlur);
       }, function (error) {
         report("share-failed " + String((error && error.message) || error));
         toast(strings().shareFailed);

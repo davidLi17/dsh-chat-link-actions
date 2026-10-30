@@ -35,7 +35,7 @@
 | `shortcut` | 快捷指令名称 | 用文件当输入跑一遍快捷指令（macOS） |
 | `url` | 带占位符的链接，例如 `mi://send?p={path}` | 替换占位符并编码后打开链接，交给注册了该协议的 App |
 | `shell` | 命令行模板，例如 `scp {path} phone:/tmp/` | 跑这条命令 |
-| `powershell` | PowerShell 脚本，例如 `Get-Item -LiteralPath {path}` | 用 Windows PowerShell 5.1 跑（`-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`） |
+| `powershell` | PowerShell 脚本，例如 `Get-Item -LiteralPath {path}` | 用 Windows PowerShell 5.1 跑（`-NoProfile -NonInteractive -Command`） |
 | `pwsh` | 同一份 PowerShell 脚本 | 用 PowerShell 7+ 跑，参数同上 |
 
 占位符：`{path}` 文件绝对路径、`{dir}` 所在目录、`{name}` 文件名、`{url}` 引用链接。`shell` 里会被正确加引号，`powershell` / `pwsh` 里会变成单引号字面量（`$` 不展开，脚本里不用再加引号），`url` 里会被百分号编码。

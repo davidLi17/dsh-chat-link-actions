@@ -110,9 +110,9 @@
     },
     {
       "kind": "shortcut",
-      "platform": "darwin",
-      "value": "快捷指令名称",
-      "effect": "用文件当输入跑一遍这个快捷指令",
+      "platform": "darwin, win32",
+      "value": "macOS 快捷指令名；Windows shortcuts 目录中 .ps1/.lnk 的完整文件名",
+      "effect": "把文件作为输入运行本机工作流，Windows 脚本遵守本机执行策略",
       "example": {
         "label": "存到手机",
         "kind": "shortcut",
@@ -131,7 +131,7 @@
     },
     {
       "kind": "share",
-      "platform": "darwin",
+      "platform": "darwin, win32",
       "value": "",
       "effect": "弹出系统分享面板，让用户在面板里选目标",
       "example": {
@@ -142,9 +142,9 @@
     },
     {
       "kind": "service",
-      "platform": "darwin",
-      "value": "原生分享服务的标题，例如 发送到微信",
-      "effect": "把文件直接交给那个 App 的分享扩展，不弹面板",
+      "platform": "darwin, win32",
+      "value": "macOS 分享服务标题；Windows SendTo 中 .lnk 的完整文件名",
+      "effect": "macOS 调用分享扩展；Windows 把文件交给该发送到快捷方式（由目标应用决定后续操作）",
       "example": {
         "label": "发送到微信",
         "kind": "service",

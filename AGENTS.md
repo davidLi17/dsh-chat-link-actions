@@ -24,7 +24,7 @@ node <plugin>/cli.js list            # 确认
 | 「用 PowerShell 处理一下」 | `powershell` | PowerShell 脚本，Windows PowerShell 5.1 跑 |
 | 「用 PowerShell 7 / pwsh」 | `pwsh` | 同一份脚本，PowerShell 7+ 跑 |
 | 「存到手机」「用某 App 的协议打开」 | `url` | 带占位符的链接 |
-| 「跑某个快捷指令」 | `shortcut` | 快捷指令名字（仅 macOS） |
+| 「跑某个快捷指令」 | `shortcut` | macOS 快捷指令名；Windows shortcuts 目录中的 .ps1/.lnk 文件名 |
 
 ## 入口给谁看（scope）
 
@@ -53,3 +53,10 @@ node <plugin>/cli.js apply --json '[{"label":"用 VLC 打开","kind":"app","valu
 
 `node <plugin>/cli.js protocol` 输出机器可读的那份（存储路径、上限、每种 kind 的语义、HTTP 路由、错误码）。
 人也读得懂的版本在同目录 `PROTOCOL.md`。
+
+## Windows 自用版
+
+- `share` 弹 Windows 系统分享面板，由用户选目标；不保证微信等桌面应用注册为系统分享目标，不自动选联系人。
+- `service` 使用 `%APPDATA%\Microsoft\Windows\SendTo` 中的 `.lnk` 完整文件名；用 `detect` 读取实际可用项。
+- `shortcut` 使用 `~/.dsh/chat-link-actions/shortcuts` 中的 `.ps1` / `.lnk` 完整文件名。PowerShell 脚本第一个参数是文件路径，不修改 ExecutionPolicy。
+- 不复制 macOS 快捷指令名称到 Windows；先配置对应 Windows 脚本或快捷方式。
