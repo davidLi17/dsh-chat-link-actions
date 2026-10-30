@@ -219,6 +219,13 @@ test('同名文件只在当前消息里找，不拿相邻消息的路径', () =>
   assert.equal(paths.pathForCardName(card, 'clip.mp4'), null)
 })
 
+test('自定义入口失败按原因说话，不都说剪贴板不可用', () => {
+  const words = { actionNeedsFile: '文件', managerFailed: '失败' }
+  assert.equal(paths.customFailureText(new Error('app-needs-file'), words), '文件')
+  assert.equal(paths.customFailureText(new Error('share-needs-file'), words), '文件')
+  assert.equal(paths.customFailureText(new Error('launch-failed'), words), '失败')
+})
+
 test('当前消息里只有一条同名路径时就认它', () => {
   const message = fakeNode('div', { 'data-message-id': 'm1' }, { textContent: '已保存 /Users/example/clip.mp4' })
   const card = cardWith('clip.mp4', message)

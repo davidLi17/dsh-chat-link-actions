@@ -930,6 +930,7 @@ window.__ModuleLoader__.load({
         managerFailed: "无法打开文件管理器",
         menuFailed: "菜单没能打开，再试一次",
         clipboardFailed: "剪贴板不可用",  // ui-copy-ignore
+        actionNeedsFile: "这个入口只对文件生效",
         copyImage: "复制图片",  // ui-copy-ignore
         imageCaption: "图片",
         copyLink: "复制链接",  // ui-copy-ignore
@@ -969,6 +970,7 @@ window.__ModuleLoader__.load({
         managerFailed: "Could not open the file manager",
         menuFailed: "Menu did not open; try again",
         clipboardFailed: "Clipboard unavailable",
+        actionNeedsFile: "This action needs a file",
         copyImage: "Copy image",  // ui-copy-ignore
         imageCaption: "Image",
         copyLink: "Copy link",  // ui-copy-ignore
@@ -1243,12 +1245,19 @@ window.__ModuleLoader__.load({
       });
     }
 
+    function customFailureText(error, words) {
+      var text = words || strings();
+      var code = String((error && error.message) || error);
+      if (code.indexOf("needs-file") !== -1) return text.actionNeedsFile;
+      return text.managerFailed;
+    }
+
     function runCustom(entry, target) {
       postJson("actions-run", { label: entry.label, scope: entry.scope || "all", path: target.path || "", url: target.url || "" }).then(function () {
         closeMenu(false);
       }, function (error) {
         report("action-failed " + entry.label + " " + String((error && error.message) || error));
-        toast(strings().clipboardFailed);
+        toast(customFailureText(error));
       });
     }
 
@@ -2086,7 +2095,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.11");
+      report("ready 0.6.12");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -2152,6 +2161,7 @@ window.__ModuleLoader__.load({
     testSeams.insertChip = insertChip;
     testSeams.PURPOSE_ORDER = function () { return PURPOSE_ORDER.slice(); };
     testSeams.pickerCurrent = pickerCurrent;
+    testSeams.customFailureText = customFailureText;
     testSeams.KIND_LIST = function () { return PURPOSE_ORDER.slice(); };
     testSeams.setRootContext = function (value) { rootContext = value === undefined ? null : value; };
     module.exports = {};

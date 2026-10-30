@@ -750,6 +750,13 @@ function showSharePanel(path, paths) {
   child.on('exit', () => dropChild(child, 'active'))
 }
 
+/** What an app-kind entry hands the app: the file if there is one, else the link. */
+export function appLaunchValue(path, url) {
+  const file = String(path ?? '')
+  if (file !== '') return file
+  return String(url ?? '')
+}
+
 export async function runCustomAction(entry, target = {}) {
   const path = String(target.path ?? '')
   const folder = path === '' ? '' : dirname(path)
@@ -785,7 +792,8 @@ export async function runCustomAction(entry, target = {}) {
     return
   }
   if (entry.kind === 'app') {
-    const where = path !== '' ? path : folder
+    /* 网页链接没有磁盘文件：把这个地址交给 App 打开。 */
+    const where = appLaunchValue(path, target.url)
     if (where === '') throw new Error('app-needs-file')
     if (platform === 'win32') spawn(`start "" ${quoteArgument(entry.value, 'win32')} ${quoteArgument(where, 'win32')}`, { shell: true, detached: true, stdio: 'ignore' }).unref()
     else spawn('open', ['-a', entry.value, where], { detached: true, stdio: 'ignore' }).unref()

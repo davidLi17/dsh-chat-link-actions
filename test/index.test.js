@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import {
   apply,
   ACTION_PROTOCOL,
+  appLaunchValue,
   customCommand,
   customUrl,
   CUSTOM_KINDS,
@@ -30,6 +31,7 @@ import {
   probePath,
   requireAbsolute,
   revealCommand,
+  runCustomAction,
   succeeded,
 } from '../index.js'
 
@@ -357,6 +359,13 @@ test('自定义入口：类型决定怎么把文件交出去', () => {
     ]
   )
   assert.equal(customUrl('mi://send?p={path}', { path: '/tmp/a b.png' }), 'mi://send?p=%2Ftmp%2Fa%20b.png')
+})
+
+test('自定义入口：打开方式对文件用路径，对网页链接用地址', async () => {
+  assert.equal(appLaunchValue('/Users/example/a.pdf', ''), '/Users/example/a.pdf')
+  assert.equal(appLaunchValue('', 'https://x.test/p'), 'https://x.test/p')
+  assert.equal(appLaunchValue('', ''), '')
+  await assert.rejects(runCustomAction({ kind: 'app', value: '/Applications/Google Chrome.app' }, {}), /app-needs-file/u)
 })
 
 test('自定义入口：只收有限的小清单', () => {
