@@ -791,6 +791,30 @@ window.__ModuleLoader__.load({
       return hits.length === 1 ? hits[0] : null;
     }
 
+    /**
+     * 剪贴板图片只认 PNG：webp/jpeg 的附件先画到 canvas 转 PNG，
+     * 转不了就交回原始 blob 让调用方按原类型再试一次。
+     */
+    function toPngBlob(blob) {
+      if (blob.type === "image/png") return Promise.resolve(blob);
+      if (typeof createImageBitmap !== "function" || typeof document === "undefined") return Promise.reject(new Error("no-decode"));
+      return createImageBitmap(blob).then(function (bitmap) {
+        var canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        var context = typeof canvas.getContext === "function" ? canvas.getContext("2d") : null;
+        if (context === null) throw new Error("no-canvas");
+        context.drawImage(bitmap, 0, 0);
+        if (typeof bitmap.close === "function") bitmap.close();
+        return new Promise(function (resolve, reject) {
+          canvas.toBlob(function (png) {
+            if (png === null || png === undefined) reject(new Error("no-png"));
+            else resolve(png);
+          }, "image/png");
+        });
+      });
+    }
+
     /** 图片进剪贴板：粘贴出来就是图片，不再是那串文件名。 */
     function copyImage(source) {
       var request = typeof fetch === "function" ? fetch(source, { credentials: "include" }) : Promise.reject(new Error("no fetch"));
@@ -798,8 +822,14 @@ window.__ModuleLoader__.load({
         if (response.ok !== true) throw new Error("status " + response.status);
         return response.blob();
       }).then(function (blob) {
-        var type = blob.type === "" ? "image/png" : blob.type;
-        return navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+        var original = blob.type === "" ? "image/png" : blob.type;
+        return toPngBlob(blob).then(function (png) {
+          return { type: "image/png", data: png };
+        }, function () {
+          return { type: original, data: blob };
+        });
+      }).then(function (ready) {
+        return navigator.clipboard.write([new ClipboardItem({ [ready.type]: ready.data })]);
       }).then(function () {
         toast(strings().copiedImage);
       }, function (error) {
@@ -2095,7 +2125,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 0.6.12");
+      report("ready 0.6.13");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {
@@ -2162,6 +2192,7 @@ window.__ModuleLoader__.load({
     testSeams.PURPOSE_ORDER = function () { return PURPOSE_ORDER.slice(); };
     testSeams.pickerCurrent = pickerCurrent;
     testSeams.customFailureText = customFailureText;
+    testSeams.toPngBlob = toPngBlob;
     testSeams.KIND_LIST = function () { return PURPOSE_ORDER.slice(); };
     testSeams.setRootContext = function (value) { rootContext = value === undefined ? null : value; };
     module.exports = {};

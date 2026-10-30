@@ -40,6 +40,15 @@ function nest(child, ...parents) {
 
 const body = { nodeType: 1, tagName: 'BODY', parentElement: null, className: '', dataset: {}, children: [], textContent: '', getAttribute: () => null, hasAttribute: () => false, querySelectorAll: () => [] }
 
+function fakeCanvas() {
+  return {
+    width: 0,
+    height: 0,
+    getContext: () => ({ drawImage() {} }),
+    toBlob: (callback, type) => callback(new Blob(['png'], { type }))
+  }
+}
+
 async function loadClient() {
   const source = await readFile(new URL('../client.js', import.meta.url), 'utf8')
   let api = null
@@ -47,7 +56,7 @@ async function loadClient() {
     baseURI: origin + '/',
     body,
     documentElement: { getAttribute: () => 'zh-CN' },
-    createElement: (tag) => fakeNode(tag),
+    createElement: (tag) => (String(tag).toLowerCase() === 'canvas' ? fakeCanvas() : fakeNode(tag)),
     addEventListener() {},
     removeEventListener() {}
   }
@@ -55,6 +64,9 @@ async function loadClient() {
     console,
     URL,
     URLSearchParams,
+    Blob,
+    ClipboardItem: class { constructor(items) { this.items = items } },
+    createImageBitmap: async (blob) => ({ width: 4, height: 3, close() {}, source: blob }),
     document,
     location: { origin, protocol: 'http:', href: origin + '/' },
     navigator: { language: 'zh-CN' },
@@ -217,6 +229,16 @@ test('同名文件只在当前消息里找，不拿相邻消息的路径', () =>
   const message = fakeNode('div', { 'data-message-id': 'm1' }, { textContent: '这条消息只提到别的文件 /tmp/other.mp4' })
   const card = cardWith('clip.mp4', message)
   assert.equal(paths.pathForCardName(card, 'clip.mp4'), null)
+})
+
+test('剪贴板图片统一转成 PNG，webp/jpeg 不再直接写进去', async () => {
+  const webp = new Blob(['webp'], { type: 'image/webp' })
+  const converted = await paths.toPngBlob(webp)
+  assert.equal(converted.type, 'image/png')
+  const png = new Blob(['png'], { type: 'image/png' })
+  assert.equal(await paths.toPngBlob(png), png)
+  const svg = new Blob(['<svg/>'], { type: 'image/svg+xml' })
+  assert.equal((await paths.toPngBlob(svg)).type, 'image/png')
 })
 
 test('自定义入口失败按原因说话，不都说剪贴板不可用', () => {
