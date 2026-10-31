@@ -9,8 +9,15 @@ try {
   $references = @('System.dll', 'System.Core.dll', 'System.Windows.Forms.dll', 'System.Drawing.dll',
     (Join-Path $framework 'System.Runtime.WindowsRuntime.dll'),
     (Join-Path $framework 'Facades\System.Runtime.dll'))
-  $references += @(Get-ChildItem -LiteralPath "$env:WINDIR\System32\WinMetadata" -Filter '*.winmd' | ForEach-Object { $_.FullName })
-  Add-Type -ReferencedAssemblies $references -TypeDefinition @'
+  # WinMD files are compiler metadata, not ordinary CLR assemblies. Passing them
+  # through -ReferencedAssemblies makes PowerShell try to load them first.
+  $references += @('Windows.Foundation.winmd', 'Windows.Storage.winmd', 'Windows.ApplicationModel.winmd') | ForEach-Object {
+    Join-Path "$env:WINDIR\System32\WinMetadata" $_
+  }
+  $parameters = New-Object System.CodeDom.Compiler.CompilerParameters
+  $parameters.GenerateInMemory = $true
+  foreach ($reference in $references) { [void]$parameters.ReferencedAssemblies.Add($reference) }
+  Add-Type -CompilerParameters $parameters -TypeDefinition @'
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
