@@ -24,7 +24,7 @@ test('Windows share transports paths as data, waits for actual UI readiness', as
     assert.ok(!args.some(arg => arg.includes(path)))
     const script = Buffer.from(args.at(-1), 'base64').toString('utf16le')
     assert.ok(script.includes('ShowShareUIForWindow'))
-    assert.ok(script.includes('DataRequested += requested'))
+    assert.ok(script.includes('manager.add_DataRequested(requested)'))
     return child
   } })
   assert.equal(result.child, child)
