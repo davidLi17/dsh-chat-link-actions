@@ -73,7 +73,7 @@ public static class DshWindowsShare {
                     args.Request.Data.SetStorageItems(new IStorageItem[] { item });
                 } catch (Exception) { args.Request.FailWithDisplayText("DSH could not prepare this file for sharing."); }
             };
-            var requestedToken = manager.add_DataRequested(requested);
+            manager.DataRequested += requested;
             try {
                 // CI self-check resolves the actual file, creates an HWND and binds the
                 // real WinRT event. It never opens Share UI or sends anything.
@@ -94,7 +94,7 @@ public static class DshWindowsShare {
                     expiry.Start();
                     Application.Run(owner);
                 }
-            } finally { manager.remove_DataRequested(requestedToken); }
+            } finally { manager.DataRequested -= requested; }
         }
     }
 }
