@@ -48,7 +48,7 @@ export function windowsPowerShellCommand(script) {
 export function executeWindowsScript(script, runner = execFile) {
   const { executable, args } = windowsPowerShellCommand(`$ErrorActionPreference = 'Stop';\n${script}`)
   return new Promise((resolve, reject) => {
-    runner(executable, args, { windowsHide: true, timeout: 15000, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
+    runner(executable, args, { windowsHide: true, timeout: 30000, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
       if (error) reject(new Error(`windows-action-failed: ${String(stderr || error.message).trim().slice(0, 1000)}`))
       else resolve(stdout)
     })

@@ -5,10 +5,13 @@ $ErrorActionPreference = 'Stop'
 try {
   Add-Type -AssemblyName System.Windows.Forms
   Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  Add-Type -AssemblyName System.Runtime
+  $runtimeFacade = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'System.Runtime' } | Select-Object -First 1
+  if ($null -eq $runtimeFacade) { throw 'System.Runtime facade unavailable' }
   $framework = [Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
   $references = @('System.dll', 'System.Core.dll', 'System.Windows.Forms.dll', 'System.Drawing.dll',
     (Join-Path $framework 'System.Runtime.WindowsRuntime.dll'),
-    (Join-Path $framework 'Facades\System.Runtime.dll'))
+    $runtimeFacade.Location)
   # WinMD files are compiler metadata, not ordinary CLR assemblies. Passing them
   # through -ReferencedAssemblies makes PowerShell try to load them first.
   $references += @('Windows.Foundation.winmd', 'Windows.Storage.winmd', 'Windows.ApplicationModel.winmd') | ForEach-Object {
