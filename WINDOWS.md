@@ -1,6 +1,6 @@
 # Windows 自用版：26.10.31-lhg
 
-基于 regrevia/dsh-chat-link-actions 0.6.13（`0e045e2801ad310d70f5a1d3ce9e96b3d2af4f6d`），保留 MIT 许可证和 macOS 实现。
+基于 regrevia/dsh-chat-link-actions 0.6.13（`0e045e2801ad310d70f5a1d3ce9e96b3d2af4f6d`），保留 MIT 许可证和 macOS 实现。另选择性吸收上游 0.6.14（`90bd5607f1da1c8fe60c7a2eeaba1ad2839b8251`）的波浪号路径与诊断修复，属于功能等价吸收。
 
 | 操作 | Windows 对应实现 |
 | --- | --- |
@@ -12,7 +12,7 @@
 
 ## 安装
 
-发布后在 DSH 插件管理的 Git 来源输入：
+在 DSH 插件管理的 Git 来源输入：
 
 ```
 github:davidLi17/dsh-chat-link-actions#main
@@ -52,3 +52,5 @@ PowerShell 通过 `-File` 接收选中文件参数，遵守本机脚本执行策
 ## 验证
 
 `npm run check`、`npm test`、`npm pack --dry-run`。既有 GitHub Actions 覆盖 Node 20、Linux/macOS/Windows，Windows 回归使用无敏感内容本地临时文件，分享 self-check 不弹分享 UI、不发送文件。交互式 Windows 11 DSH 内分享与真实第三方目标仍需本机验收，不把 API 自检冒充真实收件成功。
+
+Windows Server 2022 原生回归：107 项全部通过、0 跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux/macOS 条件检查通过。原生辅助代码只使用系统自带 .NET / WinRT 元数据，无需 Windows SDK。CI 记录：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41180863972 。

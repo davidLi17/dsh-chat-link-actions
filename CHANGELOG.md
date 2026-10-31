@@ -1,9 +1,11 @@
 ## 26.10.31-lhg
 
-- Pending first self-use release: retain Windows Share, SendTo and local workflows.
+- First self-use release: retain Windows Share, SendTo and local workflows.
 - Selectively absorb upstream 0.6.14: expand home paths before validation, create diagnostic log directories, and report the actual package version.
 - Upstream commits: 059a44b and 90bd5607f1da1c8fe60c7a2eeaba1ad2839b8251 (equivalent changes, not Git ancestry).
-- Windows native validation remains required before release.
+- Windows native validation passed on Windows Server 2022: 107/107 tests, plus PowerShell 5.1 and 7 each 9/9. CI: 41180863972. Linux/macOS checks also pass.
+- Fix inbox WinRT compilation: compiler metadata references, installed runtime facades, SDK-free async wait, and 30-second cold PowerShell launch allowance.
+- Interactive Windows 11 sharing and real recipient receipt remain unverified.
 
 ## 0.6.13
 
