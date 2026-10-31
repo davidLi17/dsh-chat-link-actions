@@ -25,7 +25,8 @@
     "windows-actions.js",
     "windows-share.js",
     "windows-share.ps1",
-    "WINDOWS.md"
+    "WINDOWS.md",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "deepseek-harness",
@@ -65,7 +66,7 @@
     "url": "https://github.com/davidLi17/dsh-chat-link-actions/issues"
   },
   "scripts": {
-    "test": "node --test test/index.test.js test/client-paths.test.js test/client-targets.test.js test/client-menu.test.js test/client-correctness.test.js test/windows-shell.test.mjs test/windows-actions.test.mjs test/windows-share.test.mjs",
+    "test": "node --test test/index.test.js test/client-paths.test.js test/client-targets.test.js test/client-menu.test.js test/client-correctness.test.js test/windows-shell.test.mjs test/windows-actions.test.mjs test/windows-share.test.mjs test/version.test.js",
     "check": "node --check index.js && node --check client.js && node --check cli.js && node --check windows-actions.js && node --check windows-share.js",
     "win:test": "node scripts/win-node.mjs test",
     "win:info": "node scripts/win-node.mjs info",

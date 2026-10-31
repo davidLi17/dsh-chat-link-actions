@@ -1,3 +1,10 @@
+## 26.10.31-lhg
+
+- Pending first self-use release: retain Windows Share, SendTo and local workflows.
+- Selectively absorb upstream 0.6.14: expand home paths before validation, create diagnostic log directories, and report the actual package version.
+- Upstream commits: 059a44b and 90bd5607f1da1c8fe60c7a2eeaba1ad2839b8251 (equivalent changes, not Git ancestry).
+- Windows native validation remains required before release.
+
 ## 0.6.13
 
 - 复制 webp/jpeg 图片不再报「剪贴板不可用」：放进剪贴板前统一转成 PNG，粘贴出来仍是图片。
