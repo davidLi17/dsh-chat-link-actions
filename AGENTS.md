@@ -12,7 +12,7 @@ node <plugin>/cli.js list            # 确认
 ```
 
 `<plugin>` 是插件目录，通常 `~/.dsh/profiles/desktop/node_modules/dsh-chat-link-actions`。
-一次 `apply` 可以写多条；同名 `label` 覆盖，重跑安全。
+一次 `apply` 可以写多条；同名 `label` 且相同 `scope` 覆盖，重跑安全。
 
 ## 按用户说法选 kind
 
@@ -45,8 +45,8 @@ node <plugin>/cli.js apply --json '[{"label":"用 VLC 打开","kind":"app","valu
 - `powershell` / `pwsh` 的占位符会变成单引号字面量（`$` 不展开），脚本里不用再自己加引号。
 - 拿不准节点上是 5.1 还是 7 就写 `powershell`；两个都要支持就配两条，脚本内容一样。
 - 一次配 1–3 条。菜单是给人快速点的，堆满反而难用。
-- 不认识的 `kind` 会被当成 `shell`，别依赖这个兜底。
-- 不认识的 `scope` 会被当成 `all`；认不出的后缀只给 `all` 的入口，不要为单个后缀另配一条。
+- 不认识的 `kind` 会被拒绝。
+- 不认识的 `scope` 会被拒绝；认不出的后缀只给 `all` 的入口，不要为单个后缀另配一条。
 - 写完不要说「请重启」「请刷新页面」——界面最多 5 秒自己跟上。
 
 ## 完整字段与错误码

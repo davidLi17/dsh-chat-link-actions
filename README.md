@@ -1,4 +1,4 @@
-> **Windows 自用 Fork：26.10.31-lhg** — 系统分享、发送到服务、Windows 工作流与安全应用打开。安装及具体操作见 [Windows 说明](./WINDOWS.md)。下方保留上游说明，其中 macOS 服务/快捷指令名称不能直接移植到 Windows。
+> **Windows 自用 Fork：26.11.3-lhg** — 系统分享、发送到服务、Windows 工作流与安全应用打开。安装及具体操作见 [Windows 说明](./WINDOWS.md)。下方保留上游说明，其中 macOS 服务/快捷指令名称不能直接移植到 Windows。
 
 # dsh-chat-link-actions
 

@@ -1,3 +1,13 @@
+## 26.11.3-lhg
+
+- Selectively absorb upstream 0.7.0 c93295cb3cfcd9aefc6162debfaf53a5e161fc71 and 99acd2dfbaabaee2eaa050a6ca6711c46c48ef45 (equivalent patches, not Git ancestry).
+- Preserve corrupt/unreadable custom-action configuration instead of treating it as empty. Explicit replacement keeps a backup, including valid JSON with invalid shape; failures leave the original intact.
+- Match custom entries by (label, scope): adding/editing/running one category cannot silently select a different same-name action.
+- Report spawn failures and early nonzero command exits; use Linux xdg-open. Retain Windows safe argument handling, SendTo, shortcuts, native Share/WinRT and readiness timeout.
+- Avoid upstream direct-share result-shape regression; built-in sharing stays independent of custom configuration.
+- No independent frontend dependency upgrades; host React remains untouched.
+- Verification: pending candidate CI and isolated official rc.5 installation.
+
 ## 26.10.31-lhg
 
 - First self-use release: retain Windows Share, SendTo and local workflows.

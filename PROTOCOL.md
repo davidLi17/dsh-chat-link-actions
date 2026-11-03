@@ -23,7 +23,7 @@
 | `archive` | 压缩包 | zip rar 7z tar gz bz2 xz tgz dmg iso pkg |
 | `code` | 代码 | js mjs cjs jsx ts tsx py rb go rs java c h cpp hpp cs sh bash zsh swift kt php css scss html htm json yml yaml toml xml sql ipynb |
 
-认不出后缀的目标（网页链接、无扩展名文件）只给 `all` 的入口，不猜类别。不认识的 `scope` 按 `all` 收下。
+认不出后缀的目标（网页链接、无扩展名文件）只给 `all` 的入口，不猜类别。不认识的 `scope` 会被拒绝。
 
 ## 入口类型
 
@@ -91,3 +91,8 @@ node cli.js list
 - `apply` 按 `label` 合并，同名覆盖，重跑安全；`--replace true` 整份替换。
 - 写入即生效：菜单所在页面最多 5 秒自己刷新，不用重启、不用刷新页面。
 - 挑战上限（20 条 / label 40 字 / value 400 字）会直接报错，不静默截断。
+
+## 入口身份与失败回执
+
+入口由 `(label, scope)` 唯一标识；同名多条时 `run --scope image` 明确选择，指定范围不存在不会回落其他入口。`remove --scope image` 只删该条；不指定范围仍删除该名称全部条目。
+配置缺失视为空，损坏或不可读返回错误及配置路径，不静默覆盖。明确保存替换损坏配置时保留 `.broken-*` 备份；失败时原文件不动。启动回执仅确认启动，命令早期退出非零会报告错误。

@@ -21,12 +21,15 @@ import {
   CUSTOM_KINDS,
   customActionsFile,
   sanitizeCustomActions,
+  selectCustomAction,
+  removeCustomActions,
   CUSTOM_SCOPES,
   quoteArgument,
   encodeExplorerSelect,
   encodeWindowsArgument,
   extendedWindowsPath,
   openDirectoryCommand,
+  openerCommand,
   optionalMember,
   probePath,
   requireAbsolute,
@@ -345,7 +348,6 @@ test('自定义入口：类型决定怎么把文件交出去', () => {
       { label: '快捷发送', kind: 'shortcut', value: '发送到手机' },
       { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}' },
       { label: '打开', command: 'open -a WeChat {path}' },
-      { label: '未知类型', kind: 'sudo', value: 'rm -rf' },
       { label: '空的', kind: 'app', value: '  ' }
     ]),
     [
@@ -354,10 +356,10 @@ test('自定义入口：类型决定怎么把文件交出去', () => {
       { label: '分享给设备', kind: 'service', value: '小米互联服务', scope: 'all' },
       { label: '快捷发送', kind: 'shortcut', value: '发送到手机', scope: 'all' },
       { label: '复制到手机', kind: 'url', value: 'mi://send?p={path}', scope: 'all' },
-      { label: '打开', kind: 'shell', value: 'open -a WeChat {path}', scope: 'all' },
-      { label: '未知类型', kind: 'shell', value: 'rm -rf', scope: 'all' }
+      { label: '打开', kind: 'shell', value: 'open -a WeChat {path}', scope: 'all' }
     ]
   )
+  assert.throws(() => sanitizeCustomActions([{ label: '未知类型', kind: 'sudo', value: 'rm -rf' }]), /unknown-kind/u)
   assert.equal(customUrl('mi://send?p={path}', { path: '/tmp/a b.png' }), 'mi://send?p=%2Ftmp%2Fa%20b.png')
 })
 
@@ -365,6 +367,9 @@ test('自定义入口：打开方式对文件用路径，对网页链接用地�
   assert.equal(appLaunchValue('/Users/example/a.pdf', ''), '/Users/example/a.pdf')
   assert.equal(appLaunchValue('', 'https://x.test/p'), 'https://x.test/p')
   assert.equal(appLaunchValue('', ''), '')
+  assert.equal(openerCommand('darwin'), 'open')
+  assert.equal(openerCommand('linux'), 'xdg-open')
+  assert.equal(openerCommand('win32'), 'start')
   await assert.rejects(runCustomAction({ kind: 'app', value: '/Applications/Google Chrome.app' }, {}), /app-needs-file/u)
 })
 
@@ -372,7 +377,7 @@ test('自定义入口：只收有限的小清单', () => {
   assert.deepEqual(sanitizeCustomActions([{ label: ' A ', command: ' echo {path} ' }, { label: '', command: 'x' }]), [
     { label: 'A', kind: 'shell', value: 'echo {path}', scope: 'all' }
   ])
-  assert.deepEqual(sanitizeCustomActions('nope'), [])
+  assert.throws(() => sanitizeCustomActions('nope'), /bad-shape/u)
   const many = Array.from({ length: 21 }, (_, index) => ({ label: `l${index}`, command: 'true' }))
   assert.throws(() => sanitizeCustomActions(many), /too-many-entries/u)
   assert.throws(() => sanitizeCustomActions([{ label: 'x'.repeat(41), command: 'true' }]), /label-too-long/u)
@@ -385,15 +390,14 @@ test('自定义入口：限定入口只认已知类别，缺省是通用', () =>
   assert.deepEqual(
     sanitizeCustomActions([
       { label: '用 VLC 打开', kind: 'app', value: 'VLC', scope: 'video' },
-      { label: '老配置', kind: 'app', value: 'WPS' },
-      { label: '乱写', kind: 'app', value: 'x', scope: 'gif' }
+      { label: '老配置', kind: 'app', value: 'WPS' }
     ]),
     [
       { label: '用 VLC 打开', kind: 'app', value: 'VLC', scope: 'video' },
-      { label: '老配置', kind: 'app', value: 'WPS', scope: 'all' },
-      { label: '乱写', kind: 'app', value: 'x', scope: 'all' }
+      { label: '老配置', kind: 'app', value: 'WPS', scope: 'all' }
     ]
   )
+  assert.throws(() => sanitizeCustomActions([{ label: '乱写', kind: 'app', value: 'x', scope: 'gif' }]), /unknown-scope/u)
 })
 
 test('自定义入口：配置文件在 profile 下', () => {
@@ -402,7 +406,7 @@ test('自定义入口：配置文件在 profile 下', () => {
 })
 
 test('对外协议：一份数据说清所有入口类型和调用方式', () => {
-  assert.equal(ACTION_PROTOCOL.version, 3)
+  assert.equal(ACTION_PROTOCOL.version, 4)
   assert.deepEqual(ACTION_PROTOCOL.kinds.map((item) => item.kind).sort(), [...CUSTOM_KINDS].sort())
   for (const entry of ACTION_PROTOCOL.kinds) {
     assert.equal(typeof entry.effect, 'string')
@@ -436,4 +440,25 @@ test('~ 路径：reveal 前展开成真实 home，分隔符跟随 home', () => {
   assert.equal(requireAbsolute('C:\\a\\b.md', 'win32', 'C:\\Users\\example'), 'C:\\a\\b.md')
   assert.throws(() => requireAbsolute('~someone/a.md', 'linux', '/home/example'), /absolute path required/)
   assert.throws(() => requireAbsolute('a/b.md', 'linux', '/home/example'), /absolute path required/)
+})
+
+// Reuse the existing route fixture; no native share UI is opened.
+test('direct share reaches its file guard and scope selection never falls back', async () => {
+  const actions = [{ label: 'same', scope: 'image' }, { label: 'same', scope: 'video' }]
+  assert.equal(selectCustomAction(actions, 'same').error, 'ambiguous')
+  assert.equal(selectCustomAction(actions, 'same', 'audio').error, 'not-configured')
+  assert.equal(selectCustomAction(actions, 'same', 'video').entry, actions[1])
+  assert.deepEqual(removeCustomActions(actions, { items: [{ label: 'same', scope: 'image' }] }).actions, [actions[1]])
+  const { ctx, routes } = contextWith()
+  apply(ctx)
+  const req = { method: 'POST', url: '/chat-link-actions?action=actions-run', headers: {},
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ kind: 'share' })) } }
+  const res = fakeResponse()
+  await routes[0].handler(req, res)
+  assert.equal(res.state.body.error, 'share-needs-file')
+})
+
+test('shell launch receipts distinguish success and early nonzero exit', async () => {
+  assert.equal((await runCustomAction({ kind: 'shell', value: 'exit 0' })).ok, true)
+  assert.deepEqual(await runCustomAction({ kind: 'shell', value: 'exit 7' }), { ok: false, exitCode: 7 })
 })

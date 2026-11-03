@@ -2152,7 +2152,7 @@ window.__ModuleLoader__.load({
     var inject = ["slots", "sessions", "remote", "remote.session"];
 
     function apply(ctx) {
-      report("ready 26.10.31-lhg");
+      report("ready 26.11.3-lhg");
       rootContext = ctx;
       refreshCustomActions();
       ctx.effect(function () {

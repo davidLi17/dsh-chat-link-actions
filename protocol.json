@@ -1,9 +1,9 @@
 {
-  "version": 3,
+  "version": 4,
   "storage": {
     "file": "~/.dsh/chat-link-actions/custom-actions.json",
-    "shape": "{ \"version\": 1, \"actions\": [ { \"label\": string, \"kind\": Kind, \"value\": string, \"scope\": Scope } ] }",
-    "note": "菜单与 CLI 共用这个文件。写完 5 秒内界面自己刷新，不用重启、不用刷新页面。没有 scope 的旧条目按 all 处理。"
+    "shape": "[ { \"label\": string, \"kind\": Kind, \"value\": string, \"scope\": Scope } ]",
+    "note": "裸数组，不是 {version, actions}。菜单与 CLI 共用这个文件。写完 5 秒内界面自己刷新，不用重启、不用刷新页面。没有 scope 的条目按 all 处理；kind 或 scope 写错会被拒绝（不再悄悄改成 shell / all），文件读不动或 JSON 损坏时报错并保留原文件。"
   },
   "limits": {
     "entries": 20,
@@ -221,8 +221,8 @@
     ],
     "rules": [
       "label 是用户在菜单里看到的字，写动词短语，例如「用 WPS 打开」「发送到微信」。",
-      "同名 label 视为同一条：apply 会覆盖，不会长出重复项，所以重跑是安全的。",
-      "kind 只能是 kinds 里列出的值；不认识的 kind 会被当成 shell，不要依赖这个兜底。",
+      "同名 label 与相同 scope 才视为同一条；不同 scope 独立保存。",
+      "kind 只能是 kinds 里列出的值；不认识的 kind 会拒绝。",
       "app 的 value 用 App 名字（WPS、Preview）或 .app 的完整路径；Windows 用 exe 路径。",
       "share 的 value 必须是空字符串；它弹系统面板，具体发给谁由用户在面板里选。",
       "shell 里放占位符 {path} {dir} {name} {url}，它们会被正确加引号；不要把路径硬编码。",
