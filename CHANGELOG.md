@@ -6,7 +6,7 @@
 - Report spawn failures and early nonzero command exits; use Linux xdg-open. Retain Windows safe argument handling, SendTo, shortcuts, native Share/WinRT and readiness timeout.
 - Avoid upstream direct-share result-shape regression; built-in sharing stays independent of custom configuration.
 - No independent frontend dependency upgrades; host React remains untouched.
-- Verification: pending candidate CI and isolated official rc.5 installation.
+- Verification: candidate 06263b0e6cf6d6a7b82ba9dd544d7fdbd413e74b passed existing three-platform CI 41559081930. Windows: 116 passed, 1 POSIX-permission check skipped; PowerShell 5.1 and 7 each 9/9. WinRT self-check passed without opening Share UI. Local Linux: 113 passed, 4 Windows/PowerShell checks skipped. Official DSH 0.2.1-rc.5 isolated tarball installation, all 16 shipped-file byte checks, host mount and HTTP direct-share file guard passed. Real desktop menu visuals and recipient delivery not tested.
 
 ## 26.10.31-lhg
 
