@@ -1,5 +1,7 @@
 ## 26.11.3-lhg
 
+- 2026-11-06 documentation maintenance (no new plugin version): make the Fork Git installation source explicit, correct the supported CLI syntax and stale Windows version, clarify home-path expansion, and guard installation documentation with a regression test. Runtime code and host React are unchanged.
+
 - Selectively absorb upstream 0.7.0 c93295cb3cfcd9aefc6162debfaf53a5e161fc71 and 99acd2dfbaabaee2eaa050a6ca6711c46c48ef45 (equivalent patches, not Git ancestry).
 - Preserve corrupt/unreadable custom-action configuration instead of treating it as empty. Explicit replacement keeps a backup, including valid JSON with invalid shape; failures leave the original intact.
 - Match custom entries by (label, scope): adding/editing/running one category cannot silently select a different same-name action.

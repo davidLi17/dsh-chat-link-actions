@@ -1,6 +1,6 @@
-# Windows 自用版：26.10.31-lhg
+# Windows 自用版：26.11.3-lhg
 
-基于 regrevia/dsh-chat-link-actions 0.6.13（`0e045e2801ad310d70f5a1d3ce9e96b3d2af4f6d`），保留 MIT 许可证和 macOS 实现。另选择性吸收上游 0.6.14（`90bd5607f1da1c8fe60c7a2eeaba1ad2839b8251`）的波浪号路径与诊断修复，属于功能等价吸收。
+基于 regrevia/dsh-chat-link-actions 0.6.13（`0e045e2801ad310d70f5a1d3ce9e96b3d2af4f6d`），保留 MIT 许可证和 macOS 实现。另选择性吸收上游 0.6.14（`90bd5607f1da1c8fe60c7a2eeaba1ad2839b8251`）的波浪号路径与诊断修复，以及 0.7.0（`c93295cb3cfcd9aefc6162debfaf53a5e161fc71`、`99acd2dfbaabaee2eaa050a6ca6711c46c48ef45`）的配置保护、按类别区分入口和启动回执修复，属于功能等价吸收。
 
 | 操作 | Windows 对应实现 |
 | --- | --- |
@@ -18,7 +18,7 @@
 github:davidLi17/dsh-chat-link-actions#main
 ```
 
-包内直接包含 JavaScript 和 Windows helper，不需要下载或移动 `.tgz`，无需另外编译。安装后确认版本为 `26.10.31-lhg`。此处不是 npm 发布。
+包内直接包含 JavaScript 和 Windows helper，不需要下载或移动 `.tgz`，无需另外编译。安装后确认版本为 `26.11.3-lhg`。此处不是 npm 发布；只填写包名会解析到 npm 上游，不保证包含本 Fork 的 Windows 适配。
 
 ## 系统分享
 
@@ -54,3 +54,5 @@ PowerShell 通过 `-File` 接收选中文件参数，遵守本机脚本执行策
 `npm run check`、`npm test`、`npm pack --dry-run`。既有 GitHub Actions 覆盖 Node 20、Linux/macOS/Windows，Windows 回归使用无敏感内容本地临时文件，分享 self-check 不弹分享 UI、不发送文件。交互式 Windows 11 DSH 内分享与真实第三方目标仍需本机验收，不把 API 自检冒充真实收件成功。
 
 Windows Server 2022 原生回归：107 项全部通过、0 跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux/macOS 条件检查通过。原生辅助代码只使用系统自带 .NET / WinRT 元数据，无需 Windows SDK。CI 记录：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41180863972 。
+
+当前 `26.11.3-lhg` 运行时代码已通过三平台 CI：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41559081930 。当次 Windows 116 项通过、1 项 POSIX 权限检查跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux 113 项通过、4 项 Windows/PowerShell 检查跳过。2026-11-06 的维护只纠正安装说明与增加文档回归，未发布新插件版本。

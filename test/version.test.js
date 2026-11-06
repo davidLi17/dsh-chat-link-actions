@@ -26,3 +26,13 @@ test('CHANGELOG 顶部就是当前版本', async () => {
   assert.ok(match !== null)
   assert.equal(match[1], pkg.version)
 })
+
+test('自用版安装文档显示当前版本，不引导安装 npm 上游包', async () => {
+  for (const file of ['README.md', 'WINDOWS.md']) {
+    const doc = await readFile(new URL(`../${file}`, import.meta.url), 'utf8')
+    const headingVersion = doc.split('\n')[0].match(/[0-9]+\.[0-9]+\.[0-9]+-lhg(?:\.[0-9]+)?/u)
+    assert.equal(headingVersion?.[0], pkg.version, `${file} 的标题版本应与包一致`)
+    assert.ok(doc.includes('github:davidLi17/dsh-chat-link-actions#main'), `${file} 应提供自用 Fork 安装源`)
+    assert.doesNotMatch(doc, /dsh plugin install dsh-chat-link-actions/u)
+  }
+})
