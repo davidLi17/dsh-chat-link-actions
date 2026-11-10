@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-link-actions",
-  "version": "26.11.3-lhg",
+  "version": "26.11.10-lhg",
   "description": "DSH 文件与链接右键操作：打开应用、系统分享、发送到与自定义工作流（macOS / Windows）",
   "type": "module",
   "main": "index.js",
@@ -51,6 +51,12 @@
         "@deepseek-ai/dsh-client-connection"
       ],
       "platform": "web"
+    },
+    "compatibility": {
+      "dsh": "0.2.2-rc.1",
+      "dshReleases": {
+        "0.2.2-rc.1": "compatible"
+      }
     }
   },
   "author": {
@@ -70,7 +76,8 @@
     "check": "node --check index.js && node --check client.js && node --check cli.js && node --check windows-actions.js && node --check windows-share.js",
     "win:test": "node scripts/win-node.mjs test",
     "win:info": "node scripts/win-node.mjs info",
-    "win:pwsh": "node scripts/win-node.mjs pwsh"
+    "win:pwsh": "node scripts/win-node.mjs pwsh",
+    "test:host": "node scripts/check-dsh-host.mjs"
   },
   "bin": {
     "dsh-chat-link-actions": "./cli.js"

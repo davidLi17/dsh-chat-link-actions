@@ -1,3 +1,10 @@
+## 26.11.10-lhg
+
+- Declare DSH 0.2.2-rc.1 support after checking the official source and testing the packed plugin through the official CLI, isolated Web profile, authenticated HTTP routes and composed client resources.
+- Add a reproducible host check for bundle registration, client delivery, cookie authentication, foreign-origin rejection, method/path validation and read-only configuration access. Existing runtime, Windows sharing, SendTo, custom workflows and security fence are unchanged.
+- Local Linux regressions: 115 passed, 4 Windows/PowerShell checks skipped. Sandboxed Chromium could not start because the environment prohibited its socket; visual desktop menus and real OS sharing are not claimed as verified.
+- Upstream remains at 99acd2dfbaabaee2eaa050a6ca6711c46c48ef45; preserve the MIT notice and all fork customizations. No workflow or permission changes, npm publication or package upload.
+
 ## 26.11.3-lhg
 
 - 2026-11-06 documentation maintenance (no new plugin version): make the Fork Git installation source explicit, correct the supported CLI syntax and stale Windows version, clarify home-path expansion, and guard installation documentation with a regression test. Runtime code and host React are unchanged.
