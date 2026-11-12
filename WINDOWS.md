@@ -1,4 +1,4 @@
-# Windows 自用版：26.11.10-lhg
+# Windows 自用版：26.11.12-lhg
 
 DSH 0.2.2-rc.1 宿主兼容性已验证；本轮在 Linux 完成安装和真实宿主 HTTP 检查，Windows 原生分享与桌面交互仍须真机验收。
 
@@ -20,7 +20,7 @@ DSH 0.2.2-rc.1 宿主兼容性已验证；本轮在 Linux 完成安装和真实�
 github:davidLi17/dsh-chat-link-actions#main
 ```
 
-包内直接包含 JavaScript 和 Windows helper，不需要下载或移动 `.tgz`，无需另外编译。安装后确认版本为 `26.11.10-lhg`。此处不是 npm 发布；只填写包名会解析到 npm 上游，不保证包含本 Fork 的 Windows 适配。
+包内直接包含 JavaScript 和 Windows helper，不需要下载或移动 `.tgz`，无需另外编译。安装后确认版本为 `26.11.12-lhg`。此处不是 npm 发布；只填写包名会解析到 npm 上游，不保证包含本 Fork 的 Windows 适配。
 
 ## 系统分享
 
@@ -57,4 +57,6 @@ PowerShell 通过 `-File` 接收选中文件参数，遵守本机脚本执行策
 
 Windows Server 2022 原生回归：107 项全部通过、0 跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux/macOS 条件检查通过。原生辅助代码只使用系统自带 .NET / WinRT 元数据，无需 Windows SDK。CI 记录：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41180863972 。
 
-当前 `26.11.10-lhg` 运行时代码已通过三平台 CI：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41559081930 。当次 Windows 116 项通过、1 项 POSIX 权限检查跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux 113 项通过、4 项 Windows/PowerShell 检查跳过。2026-11-06 的维护只纠正安装说明与增加文档回归，未发布新插件版本。
+历史 `26.11.3-lhg` 运行时代码通过三平台 CI：https://github.com/davidLi17/dsh-chat-link-actions/actions/runs/41559081930 。当次 Windows 116 项通过、1 项 POSIX 权限检查跳过，PowerShell 5.1 / 7 各额外 9 项通过；Linux 113 项通过、4 项 Windows/PowerShell 检查跳过。2026-11-06 的维护只纠正安装说明与增加文档回归，未发布新插件版本。
+
+本轮 `26.11.12-lhg` 沿用上述 Windows 运行时逻辑，没有重新执行 Windows 原生分享；本轮结果见 CHANGELOG，旧 CI 不代表新提交已跑过。

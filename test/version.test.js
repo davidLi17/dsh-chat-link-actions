@@ -38,8 +38,9 @@ test('自用版安装文档显示当前版本，不引导安装 npm 上游包', 
 })
 
 
-test('rc1 支持声明与真实宿主检查入口一致', () => {
+test('rc1/rc2 支持声明与真实宿主检查入口一致', () => {
   assert.equal(pkg.dsh.compatibility.dsh, '0.2.2-rc.1')
   assert.equal(pkg.dsh.compatibility.dshReleases['0.2.2-rc.1'], 'compatible')
+  assert.equal(pkg.dsh.compatibility.dshReleases['0.2.2-rc.2'], 'compatible')
   assert.equal(pkg.scripts['test:host'], 'node scripts/check-dsh-host.mjs')
 })

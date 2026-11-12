@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-link-actions",
-  "version": "26.11.10-lhg",
+  "version": "26.11.12-lhg",
   "description": "DSH 文件与链接右键操作：打开应用、系统分享、发送到与自定义工作流（macOS / Windows）",
   "type": "module",
   "main": "index.js",
@@ -55,7 +55,8 @@
     "compatibility": {
       "dsh": "0.2.2-rc.1",
       "dshReleases": {
-        "0.2.2-rc.1": "compatible"
+        "0.2.2-rc.1": "compatible",
+        "0.2.2-rc.2": "compatible"
       }
     }
   },

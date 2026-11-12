@@ -1,3 +1,12 @@
+## 26.11.12-lhg
+
+- Verify and precisely declare DSH 0.2.2-rc.2 support alongside rc.1. Official prerelease source: https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2, `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`; previous host `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`.
+- No runtime logic or dependency changes. The plugin keeps its own fixed-position menu, existing session-scoped inputActions, file-route requestRejection checks, and host React. It does not wrap Session.append or consume the changed floating-position API. Windows Share, SendTo, scripts and permissions remain unchanged.
+- Upstream still `99acd2dfbaabaee2eaa050a6ca6711c46c48ef45`; no new patch to merge. Previous c93295c/99acd2d changes remain equivalently absorbed, not Git ancestors. Fork base `59a56ebb20be4fa2a2b3dcb9732d229a34965be3`; MIT retained.
+- Syntax and 115 local tests pass; 4 Windows/PowerShell tests skipped on Linux. Real source-built rc.2 CLI isolated Web installation and HTTP checks pass: bundle/client delivery, cookie authentication, foreign-origin rejection, method/path validation and read-only config.
+- Sandboxed Chromium 141 on that real host verifies path context menu, quote into the current composer without sending, narrow-viewport positioning, open/cancel custom action editor and preserved draft. Fixture turns end with MISSING_CREDENTIAL; no model call, account or user data was used.
+- rc.2 npm package unavailable during the run. Source-built Web validation does not claim official Desktop launcher, native macOS/Windows sharing or recipient-delivery testing. No installation-script bypass, permission changes, package upload or npm publication.
+
 ## 26.11.10-lhg
 
 - Declare DSH 0.2.2-rc.1 support after checking the official source and testing the packed plugin through the official CLI, isolated Web profile, authenticated HTTP routes and composed client resources.

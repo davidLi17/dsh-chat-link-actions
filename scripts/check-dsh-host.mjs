@@ -9,7 +9,9 @@ import { join, resolve } from 'node:path'
 const cli = process.env.DSH_CLI
 const tarball = process.argv[2]
 assert.ok(cli && tarball, 'Usage: DSH_CLI=/path/to/dsh/lib/bin.js node scripts/check-dsh-host.mjs plugin.tgz')
-assert.equal(execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), '0.2.2-rc.1')
+const hostVersion = process.env.DSH_HOST_VERSION || '0.2.2-rc.1'
+assert.ok(['0.2.2-rc.1', '0.2.2-rc.2'].includes(hostVersion))
+assert.equal(execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), hostVersion)
 const root = await mkdtemp(join(tmpdir(), 'dsh-link-host-'))
 const env = { ...process.env, HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), DSH_HOME: join(root, 'dsh'),
   XDG_CONFIG_HOME: join(root, 'config'), XDG_DATA_HOME: join(root, 'data'),
@@ -18,7 +20,7 @@ let server
 let logs = ''
 try {
   await mkdir(env.HOME, { recursive: true })
-  const args = ['plugin', '--profile', 'web', 'add', `file:${resolve(tarball)}`, '--ignore-scripts']
+  const args = ['plugin', '--profile', 'web', 'add', `file:${resolve(tarball)}`]
   if (process.env.PNPM_STORE_DIR) args.push('--store-dir', process.env.PNPM_STORE_DIR)
   execFileSync(process.execPath, [cli, ...args], { env, stdio: 'pipe', timeout: 120_000 })
   const profile = join(env.DSH_HOME, 'profiles/web')
@@ -27,7 +29,7 @@ try {
   const installed = JSON.parse(await readFile(join(profile, 'node_modules/dsh-chat-link-actions/package.json'), 'utf8'))
   const expected = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(installed.version, expected.version)
-  assert.equal(installed.dsh.compatibility.dsh, '0.2.2-rc.1')
+  assert.equal(installed.dsh.compatibility.dshReleases[hostVersion], 'compatible')
   server = spawn(process.execPath, [cli, 'web', '--port', '0', '--no-open'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   server.stdout.on('data', chunk => { logs += chunk })
   server.stderr.on('data', chunk => { logs += chunk })
@@ -72,7 +74,7 @@ try {
   assert.equal(invalid.status, 400)
   assert.equal((await invalid.json()).error, 'absolute path required')
   assert.doesNotMatch(logs, /(?:incompatible|skipping profile bundle).*chat-link-actions/i)
-  console.log(JSON.stringify({ host: '0.2.2-rc.1', version: installed.version, bundleRegistered: true, clientServed: true,
+  console.log(JSON.stringify({ host: hostVersion, version: installed.version, bundleRegistered: true, clientServed: true,
     authenticatedRead: true, unauthenticatedRejected: true, foreignOriginRejected: true,
     invalidPathRejected: true, methodRestricted: true, osLauncherInvoked: false, browserVisualsTested: false }))
 } finally {

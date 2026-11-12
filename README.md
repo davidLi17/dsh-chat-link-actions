@@ -1,16 +1,24 @@
-> **Windows 自用 Fork：26.11.10-lhg** — 系统分享、发送到服务、Windows 工作流与安全应用打开。安装及具体操作见 [Windows 说明](./WINDOWS.md)。下方保留上游说明，其中 macOS 服务/快捷指令名称不能直接移植到 Windows。
+> **Windows 自用 Fork：26.11.12-lhg** — 系统分享、发送到服务、Windows 工作流与安全应用打开。安装及具体操作见 [Windows 说明](./WINDOWS.md)。下方保留上游说明，其中 macOS 服务/快捷指令名称不能直接移植到 Windows。
 
 # dsh-chat-link-actions
 
-## DSH 0.2.2-rc.1 兼容性
+## DSH 0.2.2-rc.2 / rc.1 兼容性
+
+本轮按官方预发布 tag `dsh-v0.2.2-rc.2`、源码 `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c` 检查。
+官方源码编译 CLI 的隔离 Web 安装、真实 HTTP 和沙箱 Chromium 检查通过：右键菜单、引用到当前会话草稿（不自动发送）、窄视口定位、自定义入口取消均正常。
+rc.2 npm 包本轮尚不可用；此结论针对官方源码构建宿主，不是用户 Windows/macOS Desktop 的系统分享验收。现有原生分享、SendTo、脚本和权限行为未改。
+
+原 rc.1 验证：
 
 `26.11.10-lhg` 已对照官方源码 `66491b05`，通过官方 CLI 隔离安装、真实 Web 宿主与客户端资源组合检查。HTTP 实测保留 cookie 鉴权、跨来源拒绝、方法限制、路径拒绝与配置读取；Windows 分享、SendTo、工作流及安全边界未改。
 
 ```bash
-DSH_CLI=/path/to/@deepseek-ai/dsh/lib/bin.js node scripts/check-dsh-host.mjs /path/to/dsh-chat-link-actions-26.11.10-lhg.tgz
+DSH_CLI=/path/to/@deepseek-ai/dsh/lib/bin.js node scripts/check-dsh-host.mjs /path/to/dsh-chat-link-actions-26.11.12-lhg.tgz
 ```
 
-当前 Linux 回归 115 项通过、4 项 Windows/PowerShell 测试跳过。沙箱内 Chromium 因 socket 权限无法启动，未宣称桌面菜单视觉、真实系统分享或收件人送达已验证。脚本只操作临时 HOME，不启动应用或分享文件。
+原 rc.1 检查的 Linux 回归 115 项通过、4 项 Windows/PowerShell 测试跳过；当时 Chromium 因 socket 权限未启动。本轮 rc.2 的真实浏览器结果见上文，仍未验证原生系统分享和收件人送达。脚本只操作临时 HOME，不启动外部应用或分享文件。
+
+检查源码构建 rc.2 时，在命令前添加 `DSH_HOST_VERSION=0.2.2-rc.2`，并把 DSH_CLI 指向对应官方源码构建 CLI。
 
 **对话里的附件和路径，右键就是你自己的入口。** 发给微信好友、用谷歌浏览器打开，或者你想到的任何处理——一个右键，做你想做的任何事。
 
@@ -70,7 +78,7 @@ DSH 桌面版请在插件管理的 Git 来源输入：
 github:davidLi17/dsh-chat-link-actions#main
 ```
 
-安装后确认版本为 `26.11.10-lhg`。仅用包名会解析到 npm 上游，不能保证包含本 Fork 的 Windows 分享、SendTo 和本地工作流适配；本 Fork 不发布 npm 安装包。完整的 Windows 操作和限制见 [Windows 说明](./WINDOWS.md)。
+安装后确认版本为 `26.11.12-lhg`。仅用包名会解析到 npm 上游，不能保证包含本 Fork 的 Windows 分享、SendTo 和本地工作流适配；本 Fork 不发布 npm 安装包。完整的 Windows 操作和限制见 [Windows 说明](./WINDOWS.md)。
 
 使用官方 DSH CLI 管理 web 配置时，命令为：
 
